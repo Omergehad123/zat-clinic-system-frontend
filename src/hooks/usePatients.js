@@ -102,3 +102,21 @@ export const useDeletePatient = () => {
     }
   });
 };
+
+export const useUpdatePatient = () => {
+  const queryClient = useQueryClient();
+  const showToast = useUIStore(s => s.showToast);
+
+  return useMutation({
+    mutationFn: ({ id, data }) => patientsService.updatePatient(id, data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['patient', variables.id] });
+      queryClient.invalidateQueries({ queryKey: ['patients'] });
+      queryClient.invalidateQueries({ queryKey: ['finance'] });
+      showToast('تم تحديث بيانات النزيل بنجاح', 'success');
+    },
+    onError: (err) => {
+      showToast(err.message || 'حدث خطأ أثناء تعديل بيانات النزيل', 'error');
+    }
+  });
+};

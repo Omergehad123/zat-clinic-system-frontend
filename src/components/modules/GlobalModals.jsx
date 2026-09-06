@@ -2,19 +2,20 @@
 
 import { useState, useEffect } from 'react';
 import { useUIStore } from '../../store/useUIStore';
-import { useAddPatient, useAddPayment, useAddPatientExpense, useDischargePatient, useDeletePatient } from '../../hooks/usePatients';
+import { useAddPatient, useAddPayment, useAddPatientExpense, useDischargePatient, useDeletePatient, useUpdatePatient } from '../../hooks/usePatients';
 import { useAddEmployee } from '../../hooks/useEmployees';
 import { useEmployees } from '../../hooks/useEmployees';
 import { useAddAdvance } from '../../hooks/useAdvances';
 import { useCreateInvoice, useUpdateInvoice } from '../../hooks/useInvoices';
 import { useAddExpense } from '../../hooks/useFinance';
 import { formatCurrency } from '../../utils/formatters';
-import { X, Plus, Trash2, Calculator, LogOut, CheckCircle, AlertTriangle } from 'lucide-react';
+import { X, Plus, Trash2, Calculator, LogOut, CheckCircle, AlertTriangle, Pencil, RotateCcw } from 'lucide-react';
 
 export default function GlobalModals() {
   const { activeModal, modalData, closeModal } = useUIStore();
 
   const addPatientMutation = useAddPatient();
+  const updatePatientMutation = useUpdatePatient();
   const addPaymentMutation = useAddPayment();
   const addPatientExpenseMutation = useAddPatientExpense();
   const dischargePatientMutation = useDischargePatient();
@@ -33,10 +34,13 @@ export default function GlobalModals() {
   const [patExpectedExit, setPatExpectedExit] = useState('');
   const [patStayValue, setPatStayValue] = useState('');
   const [patFirstPayment, setPatFirstPayment] = useState('');
+  const [patInitialExpenses, setPatInitialExpenses] = useState('');
   const [patNotes, setPatNotes] = useState('');
 
-  // Auto calculated remaining for Add Patient
+  // Auto calculated values for Add Patient
   const calculatedPatRemaining = Math.max(0, (Number(patStayValue) || 0) - (Number(patFirstPayment) || 0));
+  // صافي الإيرادات = قيمة الإقامة - المصاريف
+  const calculatedNetRevenue = (Number(patStayValue) || 0) - (Number(patInitialExpenses) || 0);
 
   // --- Form 2: Add Employee State ---
   const [empType, setEmpType] = useState('دكتور');
@@ -85,6 +89,14 @@ export default function GlobalModals() {
   // Discharge state
   const [dischargeDate, setDischargeDate] = useState(new Date().toISOString().split('T')[0]);
 
+  // Renew Patient State
+  const [renewEntryDate, setRenewEntryDate] = useState(new Date().toISOString().split('T')[0]);
+  const [renewExpectedExit, setRenewExpectedExit] = useState('');
+  const [renewStayValue, setRenewStayValue] = useState('');
+  const [renewFirstPayment, setRenewFirstPayment] = useState('');
+  const [renewExpenseDeposit, setRenewExpenseDeposit] = useState('');
+  const [renewNotes, setRenewNotes] = useState('');
+
   // Reset/Prefill helper
   useEffect(() => {
     if (!activeModal) return;
@@ -92,7 +104,32 @@ export default function GlobalModals() {
       setPatName('');
       setPatStayValue('');
       setPatFirstPayment('');
+      setPatInitialExpenses('');
       setPatNotes('');
+    }
+    if (activeModal === 'EDIT_PATIENT' && modalData) {
+      setPatName(modalData.name || '');
+      setPatEntryDate(
+        modalData.entryDate
+          ? new Date(modalData.entryDate).toISOString().split('T')[0]
+          : new Date().toISOString().split('T')[0]
+      );
+      setPatExpectedExit(
+        modalData.exitDate
+          ? new Date(modalData.exitDate).toISOString().split('T')[0]
+          : (modalData.expectedExitDate ? new Date(modalData.expectedExitDate).toISOString().split('T')[0] : '')
+      );
+      setPatStayValue(modalData.stayValue ?? modalData.accommodationAmount ?? '');
+      setPatExpenseDeposit(modalData.expenseDeposit ?? modalData.expensesDeposit ?? '');
+      setPatNotes(modalData.notes || '');
+    }
+    if (activeModal === 'RENEW_PATIENT' && modalData) {
+      setRenewEntryDate(new Date().toISOString().split('T')[0]);
+      setRenewExpectedExit('');
+      setRenewStayValue(modalData.stayValue ?? modalData.accommodationAmount ?? '');
+      setRenewFirstPayment('');
+      setRenewExpenseDeposit('');
+      setRenewNotes('');
     }
     if (activeModal === 'ADD_EMPLOYEE') {
       setEmpName('');
@@ -124,6 +161,8 @@ export default function GlobalModals() {
         <div className="flex items-center justify-between border-b border-zinc-800 pb-4 mb-5">
           <h2 className="text-lg font-bold text-white">
             {activeModal === 'ADD_PATIENT' && 'إضافة نزيل جديد'}
+            {activeModal === 'EDIT_PATIENT' && `تعديل بيانات النزيل: ${modalData?.name}`}
+            {activeModal === 'RENEW_PATIENT' && `تجديد إقامة النزيل: ${modalData?.name}`}
             {activeModal === 'ADD_EMPLOYEE' && 'إضافة موظف جديد'}
             {activeModal === 'ADD_ADVANCE' && 'إضافة سلفة موظف'}
             {activeModal === 'ADD_INVOICE' && 'إضافة فاتورة مصروفات (أصناف)'}
@@ -153,8 +192,10 @@ export default function GlobalModals() {
                 name: patName,
                 entryDate: patEntryDate,
                 expectedExitDate: patExpectedExit,
+                accommodationAmount: Number(patStayValue),
+                firstPayment: Number(patFirstPayment) || 0,
+                initialExpenses: Number(patInitialExpenses) || 0,
                 stayValue: patStayValue,
-                firstPayment: patFirstPayment,
                 notes: patNotes
               }, { onSuccess: closeModal });
             }}
@@ -224,12 +265,49 @@ export default function GlobalModals() {
             <div className="p-3.5 bg-zinc-950 border border-zinc-800 rounded-xl flex items-center justify-between">
               <div className="flex items-center gap-2 text-xs text-zinc-400">
                 <Calculator className="w-4 h-4 text-white" />
-                <span>المبلغ المتبقي المستحق (يحسب تلقائياً):</span>
+                <span>المبلغ المتبقي من الإقامة:</span>
               </div>
               <div className="text-base font-black text-white">
                 {formatCurrency(calculatedPatRemaining)}
               </div>
             </div>
+
+            {/* Initial Patient Expenses Field */}
+            <div>
+              <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                مصاريف النزيل (جنيه)
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={patInitialExpenses}
+                onChange={(e) => setPatInitialExpenses(e.target.value)}
+                placeholder="مثال: 500 أو 2000"
+                className="mono-input text-sm dir-ltr"
+              />
+              <p className="text-[11px] text-zinc-500 mt-1">
+                المصاريف الشخصية للنزيل (أدوية، مستلزمات، إلخ) — تُخصم من قيمة الإقامة لحساب صافي الإيرادات
+              </p>
+            </div>
+
+            {/* Net Revenue Preview */}
+            {(Number(patStayValue) > 0 || Number(patInitialExpenses) > 0) && (
+              <div className={`p-3.5 rounded-xl border flex items-center justify-between ${
+                calculatedNetRevenue >= 0
+                  ? 'bg-emerald-500/5 border-emerald-500/20'
+                  : 'bg-rose-500/5 border-rose-500/20'
+              }`}>
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <span className="font-semibold">صافي الإيرادات المتوقع:</span>
+                  <span className="text-zinc-500 text-[11px]">(قيمة الإقامة − المصاريف)</span>
+                </div>
+                <div className={`text-base font-black ${
+                  calculatedNetRevenue >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                }`}>
+                  {formatCurrency(calculatedNetRevenue)}
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-semibold text-zinc-300 mb-1.5">ملاحظات</label>
@@ -245,6 +323,236 @@ export default function GlobalModals() {
               <button type="button" onClick={closeModal} className="mono-btn-secondary text-xs">إلغاء</button>
               <button type="submit" disabled={addPatientMutation.isPending} className="mono-btn-primary text-xs">
                 {addPatientMutation.isPending ? 'جاري الحفظ...' : 'حفظ النزيل'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* 1.5. EDIT PATIENT MODAL */}
+        {activeModal === 'EDIT_PATIENT' && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              updatePatientMutation.mutate(
+                {
+                  id: modalData?.id || modalData?._id,
+                  data: {
+                    name: patName,
+                    entryDate: patEntryDate,
+                    expectedExitDate: patExpectedExit,
+                    stayValue: patStayValue,
+                    expenseDeposit: Number(patExpenseDeposit) || 0,
+                    notes: patNotes
+                  }
+                },
+                { onSuccess: closeModal }
+              );
+            }}
+            className="space-y-4"
+          >
+            <div>
+              <label className="block text-xs font-semibold text-zinc-300 mb-1.5">اسم النزيل *</label>
+              <input
+                type="text"
+                required
+                value={patName}
+                onChange={(e) => setPatName(e.target.value)}
+                placeholder="الاسم الثلاثي أو الرباعي للنزيل"
+                className="mono-input text-sm"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">تاريخ الدخول *</label>
+                <input
+                  type="date"
+                  required
+                  value={patEntryDate}
+                  onChange={(e) => setPatEntryDate(e.target.value)}
+                  className="mono-input text-xs dir-ltr"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">تاريخ الخروج المتوقع</label>
+                <input
+                  type="date"
+                  value={patExpectedExit}
+                  onChange={(e) => setPatExpectedExit(e.target.value)}
+                  className="mono-input text-xs dir-ltr"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">قيمة الإقامة (جنيه) *</label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  value={patStayValue}
+                  onChange={(e) => setPatStayValue(e.target.value)}
+                  placeholder="10000"
+                  className="mono-input text-sm dir-ltr"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">وديعة مصاريف النزيل (جنيه)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={patExpenseDeposit}
+                  onChange={(e) => setPatExpenseDeposit(e.target.value)}
+                  placeholder="1000"
+                  className="mono-input text-sm dir-ltr"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-zinc-300 mb-1.5">ملاحظات الإقامة والملف الطبي/الإداري</label>
+              <textarea
+                rows="3"
+                value={patNotes}
+                onChange={(e) => setPatNotes(e.target.value)}
+                placeholder="أي تفاصيل خاصة بالحالة أو شروط الإقامة..."
+                className="mono-input text-xs"
+              />
+            </div>
+
+            <div className="pt-3 flex items-center justify-end gap-3">
+              <button type="button" onClick={closeModal} className="mono-btn-secondary text-xs">إلغاء</button>
+              <button type="submit" disabled={updatePatientMutation.isPending} className="mono-btn-primary text-xs">
+                {updatePatientMutation.isPending ? 'جاري الحفظ...' : 'حفظ التعديلات'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* 1.6. RENEW PATIENT MODAL */}
+        {activeModal === 'RENEW_PATIENT' && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const patientId = modalData?.id || modalData?._id;
+              updatePatientMutation.mutate(
+                {
+                  id: patientId,
+                  data: {
+                    status: 'current',
+                    entryDate: renewEntryDate,
+                    exitDate: renewExpectedExit || null,
+                    accommodationAmount: Number(renewStayValue) || 0,
+                    expenseDeposit: renewExpenseDeposit !== '' ? Number(renewExpenseDeposit) : (modalData?.expenseDeposit || 0),
+                    notes: renewNotes
+                      ? `${modalData?.notes || ''}\n[تجديد إقامة بتاريخ ${renewEntryDate}]: ${renewNotes}`
+                      : (modalData?.notes || '')
+                  }
+                },
+                {
+                  onSuccess: () => {
+                    if (Number(renewFirstPayment) > 0) {
+                      addPaymentMutation.mutate({
+                        patientId,
+                        amount: Number(renewFirstPayment),
+                        paymentMethod: 'كاش',
+                        date: renewEntryDate,
+                        notes: 'دفعة أولى عند تجديد الإقامة'
+                      });
+                    }
+                    closeModal();
+                  }
+                }
+              );
+            }}
+            className="space-y-4"
+          >
+            <div>
+              <label className="block text-xs font-semibold text-zinc-300 mb-1.5">اسم النزيل</label>
+              <input
+                type="text"
+                disabled
+                value={modalData?.name || ''}
+                className="mono-input text-sm opacity-70 bg-zinc-950 text-zinc-400"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">تاريخ الدخول الجديد *</label>
+                <input
+                  type="date"
+                  required
+                  value={renewEntryDate}
+                  onChange={(e) => setRenewEntryDate(e.target.value)}
+                  className="mono-input text-xs dir-ltr"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">تاريخ الخروج المتوقع</label>
+                <input
+                  type="date"
+                  value={renewExpectedExit}
+                  onChange={(e) => setRenewExpectedExit(e.target.value)}
+                  className="mono-input text-xs dir-ltr"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">قيمة الإقامة (جنيه) *</label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  value={renewStayValue}
+                  onChange={(e) => setRenewStayValue(e.target.value)}
+                  placeholder="10000"
+                  className="mono-input text-sm dir-ltr"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">دفعة أولى (اختياري)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={renewFirstPayment}
+                  onChange={(e) => setRenewFirstPayment(e.target.value)}
+                  placeholder="0"
+                  className="mono-input text-sm dir-ltr"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">وديعة مصاريف (اختياري)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={renewExpenseDeposit}
+                  onChange={(e) => setRenewExpenseDeposit(e.target.value)}
+                  placeholder="0"
+                  className="mono-input text-sm dir-ltr"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-zinc-300 mb-1.5">ملاحظات التجديد</label>
+              <textarea
+                rows="3"
+                value={renewNotes}
+                onChange={(e) => setRenewNotes(e.target.value)}
+                placeholder="سبب التجديد أو ملاحظات الاتفاق الجديد..."
+                className="mono-input text-xs"
+              />
+            </div>
+
+            <div className="pt-3 flex items-center justify-end gap-3">
+              <button type="button" onClick={closeModal} className="mono-btn-secondary text-xs">إلغاء</button>
+              <button type="submit" disabled={updatePatientMutation.isPending} className="mono-btn-primary text-xs flex items-center gap-1.5">
+                <RotateCcw className="w-3.5 h-3.5" />
+                {updatePatientMutation.isPending ? 'جاري التجديد...' : 'تأكيد تجديد الإقامة'}
               </button>
             </div>
           </form>
@@ -292,10 +600,9 @@ export default function GlobalModals() {
 
             {empType === 'دكتور' && (
               <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">التخصص *</label>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">التخصص (اختياري)</label>
                 <input
                   type="text"
-                  required
                   value={empSpec}
                   onChange={(e) => setEmpSpec(e.target.value)}
                   placeholder="مثال: أمراض باطنة، مخ وأعصاب، علاج طبيعي"
@@ -638,81 +945,124 @@ export default function GlobalModals() {
         )}
 
         {/* 6. ADD PATIENT EXPENSE MODAL */}
-        {activeModal === 'ADD_PATIENT_EXPENSE' && (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              addPatientExpenseMutation.mutate({
-                patientId: modalData?.patientId,
-                description: pexDesc,
-                category: pexCategory,
-                amount: pexAmount,
-                date: pexDate,
-                notes: pexNotes
-              }, { onSuccess: closeModal });
-            }}
-            className="space-y-4"
-          >
-            <div>
-              <label className="block text-xs font-semibold text-zinc-300 mb-1.5">بيان المصروف *</label>
-              <input
-                type="text"
-                required
-                value={pexDesc}
-                onChange={(e) => setPexDesc(e.target.value)}
-                placeholder="شراء علاج خاص، تحاليل طبية..."
-                className="mono-input text-sm"
-              />
-            </div>
+        {activeModal === 'ADD_PATIENT_EXPENSE' && (() => {
+          const deposit = Number(modalData?.expenseDeposit || modalData?.expensesDeposit || 0);
+          const totalSpent = Number(modalData?.expensesTotal || modalData?.totalExpenses || 0);
+          const currentRemaining = deposit - totalSpent;
+          const remainingAfter = currentRemaining - (Number(pexAmount) || 0);
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">التصنيف *</label>
-                <select
-                  value={pexCategory}
-                  onChange={(e) => setPexCategory(e.target.value)}
-                  className="mono-input text-sm"
-                >
-                  <option value="أدوية">أدوية</option>
-                  <option value="مستلزمات">مستلزمات</option>
-                  <option value="تحاليل وأشعة">تحاليل وأشعة</option>
-                  <option value="أخرى">أخرى</option>
-                </select>
+          return (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                addPatientExpenseMutation.mutate({
+                  patientId: modalData?.patientId || modalData?.id || modalData?._id,
+                  description: pexDesc,
+                  category: pexCategory,
+                  amount: Number(pexAmount),
+                  date: pexDate,
+                  notes: pexNotes
+                }, { onSuccess: closeModal });
+              }}
+              className="space-y-4"
+            >
+              {/* Patient info & Expense Balance Card */}
+              <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-xl space-y-2.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-zinc-400">اسم النزيل:</span>
+                  <span className="font-bold text-white">{modalData?.patientName || modalData?.name}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-zinc-900 text-xs">
+                  <div>
+                    <span className="text-zinc-500 block text-[11px]">وديعة المصاريف:</span>
+                    <span className="font-bold text-white font-mono">{formatCurrency(deposit)}</span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500 block text-[11px]">المنصرف حتى الآن:</span>
+                    <span className="font-bold text-amber-400 font-mono">{formatCurrency(totalSpent)}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-xs pt-2 border-t border-zinc-900">
+                  <span className="text-zinc-300 font-semibold">الرصيد المتبقي الحالي:</span>
+                  <span className={`font-black font-mono text-sm ${currentRemaining >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {formatCurrency(currentRemaining)}
+                  </span>
+                </div>
+
+                {Number(pexAmount) > 0 && (
+                  <div className="flex items-center justify-between text-xs pt-2 border-t border-zinc-800/80 bg-zinc-900/50 p-2 rounded-lg">
+                    <span className="text-white font-bold">المتبقي بعد هذا المصروف:</span>
+                    <span className={`font-black font-mono text-sm ${remainingAfter >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {formatCurrency(remainingAfter)}
+                      {remainingAfter < 0 && ' (تجاوز الوديعة)'}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">المبلغ (جنيه) *</label>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">بيان المصروف *</label>
                 <input
-                  type="number"
+                  type="text"
                   required
-                  min="1"
-                  value={pexAmount}
-                  onChange={(e) => setPexAmount(e.target.value)}
-                  placeholder="500"
-                  className="mono-input text-sm dir-ltr"
+                  value={pexDesc}
+                  onChange={(e) => setPexDesc(e.target.value)}
+                  placeholder="شراء علاج خاص، تحاليل طبية، طلبات كافتيريا..."
+                  className="mono-input text-sm"
                 />
               </div>
-            </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-zinc-300 mb-1.5">التاريخ *</label>
-              <input
-                type="date"
-                required
-                value={pexDate}
-                onChange={(e) => setPexDate(e.target.value)}
-                className="mono-input text-xs dir-ltr"
-              />
-            </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1.5">التصنيف *</label>
+                  <select
+                    value={pexCategory}
+                    onChange={(e) => setPexCategory(e.target.value)}
+                    className="mono-input text-sm"
+                  >
+                    <option value="أدوية">أدوية</option>
+                    <option value="مستلزمات">مستلزمات</option>
+                    <option value="تحاليل وأشعة">تحاليل وأشعة</option>
+                    <option value="كافتيريا ومشتريات">كافتيريا ومشتريات</option>
+                    <option value="أخرى">أخرى</option>
+                  </select>
+                </div>
 
-            <div className="pt-3 flex items-center justify-end gap-3">
-              <button type="button" onClick={closeModal} className="mono-btn-secondary text-xs">إلغاء</button>
-              <button type="submit" disabled={addPatientExpenseMutation.isPending} className="mono-btn-primary text-xs">
-                {addPatientExpenseMutation.isPending ? 'جاري التسجيل...' : 'حفظ المصروف'}
-              </button>
-            </div>
-          </form>
-        )}
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1.5">المبلغ (جنيه) *</label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    value={pexAmount}
+                    onChange={(e) => setPexAmount(e.target.value)}
+                    placeholder="500"
+                    className="mono-input text-sm dir-ltr"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">التاريخ *</label>
+                <input
+                  type="date"
+                  required
+                  value={pexDate}
+                  onChange={(e) => setPexDate(e.target.value)}
+                  className="mono-input text-xs dir-ltr"
+                />
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-3">
+                <button type="button" onClick={closeModal} className="mono-btn-secondary text-xs">إلغاء</button>
+                <button type="submit" disabled={addPatientExpenseMutation.isPending} className="mono-btn-primary text-xs">
+                  {addPatientExpenseMutation.isPending ? 'جاري التسجيل...' : 'تسجيل وخصم المصروف'}
+                </button>
+              </div>
+            </form>
+          );
+        })()}
 
         {/* 7. ADD DIRECT EXPENSE MODAL */}
         {activeModal === 'ADD_EXPENSE' && (

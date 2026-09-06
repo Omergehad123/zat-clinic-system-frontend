@@ -13,7 +13,8 @@ import {
   LogOut, 
   User, 
   ChevronDown, 
-  Trash2, 
+  Pencil, 
+  RotateCcw,
   DollarSign, 
   Receipt,
   MoreVertical 
@@ -140,10 +141,10 @@ export default function PatientsPage() {
                 <th className="mono-table-th">الاسم</th>
                 <th className="mono-table-th">تاريخ الدخول</th>
                 <th className="mono-table-th">تاريخ الخروج</th>
-                <th className="mono-table-th">قيمة الإقامة</th>
+                      <th className="mono-table-th">قيمة الإقامة</th>
                 <th className="mono-table-th">المدفوع</th>
                 <th className="mono-table-th">المتبقي</th>
-                <th className="mono-table-th">المصاريف</th>
+                <th className="mono-table-th">صافي الإيرادات</th>
                 <th className="mono-table-th">الحالة</th>
                 <th className="mono-table-th text-center">الإجراءات</th>
               </tr>
@@ -183,7 +184,22 @@ export default function PatientsPage() {
                       <td className={`mono-table-td font-bold ${patient.remaining > 0 ? 'text-white' : 'text-zinc-500'}`}>
                         {formatCurrency(patient.remaining)}
                       </td>
-                      <td className="mono-table-td text-zinc-300">{formatCurrency(patient.expensesTotal)}</td>
+                      <td className="mono-table-td">
+                        <div className="space-y-0.5">
+                          <div className={`font-bold font-mono text-sm ${
+                            (patient.netRevenue ?? (patient.stayValue - (patient.expensesTotal || 0))) >= 0
+                              ? 'text-emerald-400'
+                              : 'text-rose-400'
+                          }`}>
+                            {formatCurrency(patient.netRevenue ?? ((patient.stayValue || 0) - (patient.expensesTotal || 0)))}
+                          </div>
+                          {(patient.expensesTotal > 0) && (
+                            <div className="text-[10px] text-zinc-500">
+                              مصاريف: {formatCurrency(patient.expensesTotal)}
+                            </div>
+                          )}
+                        </div>
+                      </td>
                       <td className="mono-table-td">{getStatusBadge(patient.status)}</td>
                       <td className="mono-table-td text-center relative">
                         {/* Action Box Dropdown Button */}
@@ -211,7 +227,7 @@ export default function PatientsPage() {
                                 <button
                                   onClick={() => {
                                     setOpenActionId(null);
-                                    openModal('ADD_PAYMENT', { patientId: patient.id, patientName: patient.name });
+                                    openModal('ADD_PAYMENT', { ...patient, patientId: patient.id, patientName: patient.name });
                                   }}
                                   className="w-full text-right px-3 py-2 text-xs text-emerald-400 hover:bg-emerald-500/10 flex items-center gap-2 transition-colors font-medium"
                                 >
@@ -221,7 +237,7 @@ export default function PatientsPage() {
                                 <button
                                   onClick={() => {
                                     setOpenActionId(null);
-                                    openModal('ADD_PATIENT_EXPENSE', { patientId: patient.id, patientName: patient.name });
+                                    openModal('ADD_PATIENT_EXPENSE', { ...patient, patientId: patient.id, patientName: patient.name });
                                   }}
                                   className="w-full text-right px-3 py-2 text-xs text-amber-400 hover:bg-amber-500/10 flex items-center gap-2 transition-colors font-medium"
                                 >
@@ -231,7 +247,7 @@ export default function PatientsPage() {
                               </div>
 
                               <div className="py-1">
-                                {patient.status !== 'خرج' && (
+                                {patient.status !== 'خرج' && patient.status !== 'discharged' ? (
                                   <button
                                     onClick={() => {
                                       setOpenActionId(null);
@@ -242,17 +258,28 @@ export default function PatientsPage() {
                                     <LogOut className="w-3.5 h-3.5 text-zinc-400" />
                                     <span>تسجيل خروج النزيل</span>
                                   </button>
+                                ) : (
+                                  <button
+                                    onClick={() => {
+                                      setOpenActionId(null);
+                                      openModal('RENEW_PATIENT', patient);
+                                    }}
+                                    className="w-full text-right px-3 py-2 text-xs text-emerald-400 hover:bg-emerald-500/10 flex items-center gap-2 transition-colors font-medium"
+                                  >
+                                    <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
+                                    <span>تجديد الإقامة (إعادة دخول)</span>
+                                  </button>
                                 )}
 
                                 <button
                                   onClick={() => {
                                     setOpenActionId(null);
-                                    openModal('DELETE_PATIENT', patient);
+                                    openModal('EDIT_PATIENT', patient);
                                   }}
-                                  className="w-full text-right px-3 py-2 text-xs text-rose-400 hover:bg-rose-500/10 flex items-center gap-2 transition-colors font-semibold"
+                                  className="w-full text-right px-3 py-2 text-xs text-blue-400 hover:bg-blue-500/10 flex items-center gap-2 transition-colors font-medium"
                                 >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                  <span>حذف النزيل نهائياً</span>
+                                  <Pencil className="w-3.5 h-3.5" />
+                                  <span>تعديل بيانات النزيل</span>
                                 </button>
                               </div>
                             </div>

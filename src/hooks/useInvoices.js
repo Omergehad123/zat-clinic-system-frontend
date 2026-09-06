@@ -3,14 +3,16 @@ import { invoicesService } from '../services/invoices.service';
 import { useAuthStore } from '../store/useAuthStore';
 import { useUIStore } from '../store/useUIStore';
 
-export const useInvoices = () => {
+export const useInvoices = (filters = {}) => {
   const user = useAuthStore(s => s.user);
   const branch = useAuthStore(s => s.branch);
   const branchId = user?.branchId || branch?._id || branch?.id || 'all';
 
+  const queryFilters = { branchId, ...filters };
+
   return useQuery({
-    queryKey: ['invoices', branchId],
-    queryFn: () => invoicesService.getInvoices(branchId)
+    queryKey: ['invoices', queryFilters],
+    queryFn: () => invoicesService.getInvoices(queryFilters)
   });
 };
 

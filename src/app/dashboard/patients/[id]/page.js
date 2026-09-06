@@ -16,7 +16,9 @@ import {
   Clock, 
   CheckCircle2, 
   FileText,
-  DollarSign
+  DollarSign,
+  Pencil,
+  RotateCcw
 } from 'lucide-react';
 
 export default function PatientDetailPage() {
@@ -84,13 +86,28 @@ export default function PatientDetailPage() {
         </button>
 
         <div className="flex items-center gap-3">
-          {patient.status !== 'خرج' && (
+          <button
+            onClick={() => openModal('EDIT_PATIENT', patient)}
+            className="mono-btn-secondary text-xs"
+          >
+            <Pencil className="w-4 h-4" />
+            تعديل البيانات
+          </button>
+          {patient.status !== 'خرج' && patient.status !== 'discharged' ? (
             <button
               onClick={() => openModal('DISCHARGE_PATIENT', patient)}
               className="mono-btn-danger text-xs"
             >
               <LogOut className="w-4 h-4" />
               تسجيل خروج النزيل
+            </button>
+          ) : (
+            <button
+              onClick={() => openModal('RENEW_PATIENT', patient)}
+              className="mono-btn-primary text-xs"
+            >
+              <RotateCcw className="w-4 h-4" />
+              تجديد الإقامة
             </button>
           )}
           <button
@@ -153,31 +170,36 @@ export default function PatientDetailPage() {
       {/* Financial Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         
-        <div className="mono-card p-5">
+        <div className="mono-card p-4">
           <span className="text-xs font-semibold text-zinc-400">قيمة الإقامة الكلية</span>
-          <div className="text-2xl font-black text-white mt-2">
+          <div className="text-xl font-black text-white mt-1.5">
             {formatCurrency(patient.stayValue)}
           </div>
         </div>
 
-        <div className="mono-card p-5">
-          <span className="text-xs font-semibold text-zinc-400">إجمالي المدفوع</span>
-          <div className="text-2xl font-black text-white mt-2">
+        <div className="mono-card p-4">
+          <span className="text-xs font-semibold text-zinc-400">المدفوع من الإقامة</span>
+          <div className="text-xl font-black text-emerald-400 mt-1.5">
             {formatCurrency(patient.paid)}
           </div>
         </div>
 
-        <div className="mono-card p-5 border-zinc-700">
-          <span className="text-xs font-semibold text-zinc-400">المبلغ المتبقي</span>
-          <div className="text-2xl font-black text-white mt-2">
+        <div className="mono-card p-4 border-zinc-700">
+          <span className="text-xs font-semibold text-zinc-400">المتبقي من الإقامة</span>
+          <div className="text-xl font-black text-white mt-1.5">
             {formatCurrency(patient.remaining)}
           </div>
         </div>
 
-        <div className="mono-card p-5">
-          <span className="text-xs font-semibold text-zinc-400">إجمالي المصاريف الخاصة</span>
-          <div className="text-2xl font-black text-white mt-2">
-            {formatCurrency(patient.expensesTotal)}
+        <div className="mono-card p-4">
+          <span className="text-xs font-semibold text-zinc-400">صافي الإيرادات</span>
+          <div className="text-[10px] text-zinc-500 mt-0.5">قيمة الإقامة − المصاريف</div>
+          <div className={`text-xl font-black mt-1.5 ${
+            (patient.netRevenue ?? ((patient.stayValue || 0) - (patient.expensesTotal || 0))) >= 0
+              ? 'text-emerald-400'
+              : 'text-rose-400'
+          }`}>
+            {formatCurrency(patient.netRevenue ?? ((patient.stayValue || 0) - (patient.expensesTotal || 0)))}
           </div>
         </div>
 
@@ -267,10 +289,33 @@ export default function PatientDetailPage() {
       {/* Tab 2: مصاريف النزيل */}
       {activeTab === 'EXPENSES' && (
         <div className="space-y-4">
+          
+          {/* Expenses Balance Overview Box */}
+          <div className="mono-card p-4 grid grid-cols-1 sm:grid-cols-3 gap-4 bg-zinc-950/60 border-zinc-800">
+            <div>
+              <span className="text-xs text-zinc-400 block mb-1">قيمة الإقامة:</span>
+              <span className="text-lg font-black text-white font-mono">{formatCurrency(patient.stayValue || 0)}</span>
+            </div>
+            <div>
+              <span className="text-xs text-zinc-400 block mb-1">إجمالي المصاريف:</span>
+              <span className="text-lg font-black text-amber-400 font-mono">{formatCurrency(patient.expensesTotal || 0)}</span>
+            </div>
+            <div>
+              <span className="text-xs text-zinc-400 block mb-1">صافي الإيرادات:</span>
+              <span className={`text-lg font-black font-mono ${
+                (patient.netRevenue ?? ((patient.stayValue || 0) - (patient.expensesTotal || 0))) >= 0
+                  ? 'text-emerald-400'
+                  : 'text-rose-400'
+              }`}>
+                {formatCurrency(patient.netRevenue ?? ((patient.stayValue || 0) - (patient.expensesTotal || 0)))}
+              </span>
+            </div>
+          </div>
+
           <div className="flex items-center justify-between">
-            <h3 className="text-base font-bold text-white">مصاريف العلاج والمستلزمات للنزيل</h3>
+            <h3 className="text-base font-bold text-white">سجل مصاريف العلاج والمستلزمات للنزيل</h3>
             <button
-              onClick={() => openModal('ADD_PATIENT_EXPENSE', { patientId: patient.id, patientName: patient.name })}
+              onClick={() => openModal('ADD_PATIENT_EXPENSE', { ...patient, patientId: patient.id, patientName: patient.name })}
               className="mono-btn-primary text-xs"
             >
               <Plus className="w-3.5 h-3.5" />

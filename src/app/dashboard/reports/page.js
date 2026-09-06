@@ -5,6 +5,7 @@ import { useReports } from '../../../hooks/useReports';
 import { useAuthStore } from '../../../store/useAuthStore';
 import { useUIStore } from '../../../store/useUIStore';
 import { formatCurrency, getArabicMonthName, formatNumber } from '../../../utils/formatters';
+import { exportStyledExcel } from '../../../utils/excelExporter';
 import { BarChart3, Download, Calendar, TrendingUp, TrendingDown, DollarSign, Users, PieChart as PieIcon } from 'lucide-react';
 
 export default function ReportsPage() {
@@ -16,40 +17,58 @@ export default function ReportsPage() {
 
   const { data: report, isLoading } = useReports(month, year);
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (!report) return;
 
-    // Build UTF-8 CSV content compatible with Arabic Excel
-    const rows = [
-      ['تقرير الفرع المالي والإحصائي'],
-      ['اسم الفرع', branch?.name || 'فرع مدينة نصر'],
-      ['الفترة', `${getArabicMonthName(month)} ${year}`],
-      [''],
-      ['المؤشر المالي', 'المبلغ (جنيه مصري)'],
-      ['إجمالي الإيرادات', report.totals.totalRevenue],
-      ['إجمالي المصروفات والسلف', report.totals.totalExpenses],
-      ['صافي الإيرادات', report.totals.netRevenue],
-      [''],
-      ['تصنيف المصروفات', 'المبلغ (جنيه)'],
-      ...report.categoryBreakdown.map(c => [c.name, c.value]),
-      [''],
-      ['إحصائيات النزلاء', 'العدد'],
-      ['النزلاء الحاليون', report.patientStats.current],
-      ['النزلاء الجدد هذا الشهر', report.patientStats.newCount],
-      ['النزلاء الخارجون هذا الشهر', report.patientStats.exitCount],
-    ];
+    try {
+      const branchTitle = branch?.name || 'فرع المصحة';
+      const periodTitle = `الفترة: ${getArabicMonthName(month)} ${year}`;
 
-    const csvContent = '\uFEFF' + rows.map(e => e.join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `تقرير_فرع_${branch?.name || 'مدينة_نصر'}_${month}_${year}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      await exportStyledExcel({
+        filename: `تقرير_فرع_${branchTitle}_${month}_${year}.xlsx`,
+        sheets: [
+          {
+            name: 'الملخص المالي',
+            title: `التقرير المالي والإحصائي — ${branchTitle}`,
+            subtitle: periodTitle,
+            columns: [
+              { header: 'المؤشر / البيان المالي', key: 'metric', width: 35, align: 'right', headerColor: 'FF047857' },
+              { header: 'القيمة (جنيه مصري / عدد)', key: 'value', width: 25, align: 'center', headerColor: 'FF047857' }
+            ],
+            rows: [
+              { metric: 'إجمالي الإيرادات', value: report.totals?.totalRevenue || 0 },
+              { metric: 'إجمالي المصروفات والسلف', value: report.totals?.totalExpenses || 0 },
+              { metric: 'صافي الإيرادات', value: report.totals?.netRevenue || 0 },
+              { metric: 'عدد النزلاء الحاليين', value: report.patientStats?.current || 0 },
+              { metric: 'النزلاء الجدد هذا الشهر', value: report.patientStats?.newCount || 0 },
+              { metric: 'النزلاء المغادرون هذا الشهر', value: report.patientStats?.exitCount || 0 }
+            ]
+          },
+          {
+            name: 'توزيع المصروفات',
+            title: `تفاصيل المصروفات حسب التصنيف — ${branchTitle}`,
+            subtitle: periodTitle,
+            columns: [
+              { header: 'تصنيف المصروفات', key: 'name', width: 30, align: 'right', headerColor: 'FFB91C1C' },
+              { header: 'المبلغ الإجمالي (جنيه)', key: 'value', width: 25, type: 'currency', align: 'center', headerColor: 'FFB91C1C' }
+            ],
+            rows: (report.categoryBreakdown || []).map(c => ({
+              name: c.name,
+              value: c.value || 0
+            })),
+            summaryRow: {
+              name: 'إجمالي المصروفات:',
+              value: (report.categoryBreakdown || []).reduce((s, c) => s + (c.value || 0), 0)
+            }
+          }
+        ]
+      });
 
-    showToast('تم تصدير التقرير المالي بنجاح إلى ملف Excel', 'success');
+      showToast('تم تصدير التقرير المالي المنسق بنجاح إلى ملف Excel (.xlsx)', 'success');
+    } catch (err) {
+      console.error(err);
+      showToast('حدث خطأ أثناء تصدير ملف Excel', 'error');
+    }
   };
 
   return (

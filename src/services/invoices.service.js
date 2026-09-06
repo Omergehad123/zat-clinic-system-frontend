@@ -6,6 +6,15 @@ export const invoicesService = {
     if (filters.branchId && filters.branchId !== 'all') {
       query += `branchId=${filters.branchId}&`;
     }
+    if (filters.category && filters.category !== 'all') {
+      query += `category=${encodeURIComponent(filters.category)}&`;
+    }
+    if (filters.startDate) {
+      query += `startDate=${filters.startDate}&`;
+    }
+    if (filters.endDate) {
+      query += `endDate=${filters.endDate}&`;
+    }
     if (filters.month && filters.year) {
       query += `month=${filters.month}&year=${filters.year}&`;
     }
