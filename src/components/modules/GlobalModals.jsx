@@ -3,8 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useUIStore } from '../../store/useUIStore';
 import { useAddPatient, useAddPayment, useAddPatientExpense, useDischargePatient, useDeletePatient, useUpdatePatient } from '../../hooks/usePatients';
-import { useAddEmployee } from '../../hooks/useEmployees';
-import { useEmployees } from '../../hooks/useEmployees';
+import { useAddEmployee, useUpdateEmployee, useDeleteEmployee, useEmployees } from '../../hooks/useEmployees';
 import { useAddAdvance } from '../../hooks/useAdvances';
 import { useCreateInvoice, useUpdateInvoice } from '../../hooks/useInvoices';
 import { useAddExpense } from '../../hooks/useFinance';
@@ -21,6 +20,8 @@ export default function GlobalModals() {
   const dischargePatientMutation = useDischargePatient();
   const deletePatientMutation = useDeletePatient();
   const addEmployeeMutation = useAddEmployee();
+  const updateEmployeeMutation = useUpdateEmployee();
+  const deleteEmployeeMutation = useDeleteEmployee();
   const addAdvanceMutation = useAddAdvance();
   const createInvoiceMutation = useCreateInvoice();
   const updateInvoiceMutation = useUpdateInvoice();
@@ -42,10 +43,14 @@ export default function GlobalModals() {
   // صافي الإيرادات = قيمة الإقامة - المصاريف
   const calculatedNetRevenue = (Number(patStayValue) || 0) - (Number(patInitialExpenses) || 0);
 
-  // --- Form 2: Add Employee State ---
+  // --- Form 2: Add / Edit Employee State ---
   const [empType, setEmpType] = useState('دكتور');
   const [empName, setEmpName] = useState('');
   const [empSpec, setEmpSpec] = useState('');
+  const [empEditType, setEmpEditType] = useState('دكتور');
+  const [empEditName, setEmpEditName] = useState('');
+  const [empEditSpec, setEmpEditSpec] = useState('');
+  const [empEditStatus, setEmpEditStatus] = useState('active');
 
   // --- Form 3: Add Advance State ---
   const [advEmpId, setAdvEmpId] = useState('');
@@ -135,6 +140,12 @@ export default function GlobalModals() {
       setEmpName('');
       setEmpSpec('');
     }
+    if (activeModal === 'EDIT_EMPLOYEE' && modalData) {
+      setEmpEditName(modalData.name || '');
+      setEmpEditType(modalData.type || modalData.role || 'دكتور');
+      setEmpEditSpec(modalData.specialization === '-' ? '' : (modalData.specialization || ''));
+      setEmpEditStatus(modalData.status === 'نشط' ? 'active' : (modalData.status === 'معطل' ? 'inactive' : (modalData.status || 'active')));
+    }
     if (activeModal === 'EDIT_INVOICE' && modalData) {
       setInvDate(modalData.date ? new Date(modalData.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
       setInvCategory(modalData.category || 'أكل');
@@ -164,6 +175,8 @@ export default function GlobalModals() {
             {activeModal === 'EDIT_PATIENT' && `تعديل بيانات النزيل: ${modalData?.name}`}
             {activeModal === 'RENEW_PATIENT' && `تجديد إقامة النزيل: ${modalData?.name}`}
             {activeModal === 'ADD_EMPLOYEE' && 'إضافة موظف جديد'}
+            {activeModal === 'EDIT_EMPLOYEE' && `تعديل بيانات الموظف: ${modalData?.name}`}
+            {activeModal === 'DELETE_EMPLOYEE' && `تأكيد حذف الموظف: ${modalData?.name}`}
             {activeModal === 'ADD_ADVANCE' && 'إضافة سلفة موظف'}
             {activeModal === 'ADD_INVOICE' && 'إضافة فاتورة مصروفات (أصناف)'}
             {activeModal === 'EDIT_INVOICE' && `تعديل فاتورة مصروفات #${modalData?.id?.slice(-6)}`}
@@ -615,6 +628,85 @@ export default function GlobalModals() {
               <button type="button" onClick={closeModal} className="mono-btn-secondary text-xs">إلغاء</button>
               <button type="submit" disabled={addEmployeeMutation.isPending} className="mono-btn-primary text-xs">
                 {addEmployeeMutation.isPending ? 'جاري الحفظ...' : 'حفظ الموظف'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* 2.5. EDIT EMPLOYEE MODAL */}
+        {activeModal === 'EDIT_EMPLOYEE' && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              updateEmployeeMutation.mutate({
+                id: modalData?.id || modalData?._id,
+                data: {
+                  name: empEditName,
+                  type: empEditType,
+                  role: empEditType === 'دكتور' ? 'doctor' : (empEditType === 'تمريض' ? 'nurse' : (empEditType === 'مشرف' ? 'supervisor' : 'worker')),
+                  specialization: empEditSpec,
+                  status: empEditStatus
+                }
+              }, { onSuccess: closeModal });
+            }}
+            className="space-y-4"
+          >
+            <div>
+              <label className="block text-xs font-semibold text-zinc-300 mb-1.5">الوظيفة *</label>
+              <select
+                value={empEditType}
+                onChange={(e) => setEmpEditType(e.target.value)}
+                className="mono-input text-sm"
+              >
+                <option value="دكتور">دكتور</option>
+                <option value="تمريض">تمريض</option>
+                <option value="مشرف">مشرف</option>
+                <option value="عامل">عامل</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-zinc-300 mb-1.5">اسم الموظف *</label>
+              <input
+                type="text"
+                required
+                value={empEditName}
+                onChange={(e) => setEmpEditName(e.target.value)}
+                placeholder="الاسم الكامل"
+                className="mono-input text-sm"
+              />
+            </div>
+
+            {empEditType === 'دكتور' && (
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">التخصص (اختياري)</label>
+                <input
+                  type="text"
+                  value={empEditSpec}
+                  onChange={(e) => setEmpEditSpec(e.target.value)}
+                  placeholder="مثال: أمراض باطنة، مخ وأعصاب، علاج طبيعي"
+                  className="mono-input text-sm"
+                />
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs font-semibold text-zinc-300 mb-1.5">حالة الموظف *</label>
+              <select
+                value={empEditStatus}
+                onChange={(e) => setEmpEditStatus(e.target.value)}
+                className="mono-input text-sm"
+              >
+                <option value="active">نشط</option>
+                <option value="inactive">معطل</option>
+              </select>
+            </div>
+
+            <div className="pt-3 flex items-center justify-end gap-3">
+              <button type="button" onClick={closeModal} className="mono-btn-secondary text-xs">إلغاء</button>
+              <button type="submit" disabled={updateEmployeeMutation.isPending} className="mono-btn-primary text-xs flex items-center gap-1.5">
+                <Pencil className="w-3.5 h-3.5" />
+                {updateEmployeeMutation.isPending ? 'جاري الحفظ...' : 'حفظ التعديلات'}
               </button>
             </div>
           </form>
@@ -1203,6 +1295,34 @@ export default function GlobalModals() {
                 className="mono-btn-danger text-xs"
               >
                 {deletePatientMutation.isPending ? 'جاري الحذف...' : 'تأكيد الحذف النهائي'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 10. DELETE EMPLOYEE CONFIRMATION MODAL */}
+        {activeModal === 'DELETE_EMPLOYEE' && (
+          <div className="space-y-4">
+            <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-start gap-3 text-rose-400 text-xs leading-relaxed">
+              <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+              <div>
+                <strong className="block text-white font-bold mb-1 text-sm">تحذير حذف نهائي للموظف!</strong>
+                هل أنت متأكد من حذف الموظف <strong className="text-white">{modalData?.name}</strong> نهائياً من الفرع والنظام؟ سيتم مسح سجله كلياً.
+              </div>
+            </div>
+
+            <div className="pt-3 flex items-center justify-end gap-3">
+              <button type="button" onClick={closeModal} className="mono-btn-secondary text-xs">إلغاء</button>
+              <button
+                type="button"
+                disabled={deleteEmployeeMutation.isPending}
+                onClick={() => {
+                  deleteEmployeeMutation.mutate(modalData?.id || modalData?._id, { onSuccess: closeModal });
+                }}
+                className="mono-btn-danger text-xs flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                {deleteEmployeeMutation.isPending ? 'جاري الحذف...' : 'تأكيد الحذف النهائي'}
               </button>
             </div>
           </div>

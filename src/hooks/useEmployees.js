@@ -33,3 +33,37 @@ export const useAddEmployee = () => {
     }
   });
 };
+
+export const useUpdateEmployee = () => {
+  const queryClient = useQueryClient();
+  const showToast = useUIStore(s => s.showToast);
+
+  return useMutation({
+    mutationFn: ({ id, data }) => employeesService.updateEmployee(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      queryClient.invalidateQueries({ queryKey: ['attendance'] });
+      showToast('تم تعديل بيانات الموظف بنجاح', 'success');
+    },
+    onError: (err) => {
+      showToast(err.message || 'حدث خطأ أثناء تعديل بيانات الموظف', 'error');
+    }
+  });
+};
+
+export const useDeleteEmployee = () => {
+  const queryClient = useQueryClient();
+  const showToast = useUIStore(s => s.showToast);
+
+  return useMutation({
+    mutationFn: (id) => employeesService.deleteEmployee(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      queryClient.invalidateQueries({ queryKey: ['attendance'] });
+      showToast('تم حذف الموظف من الفرع والنظام بنجاح', 'success');
+    },
+    onError: (err) => {
+      showToast(err.message || 'حدث خطأ أثناء حذف الموظف', 'error');
+    }
+  });
+};

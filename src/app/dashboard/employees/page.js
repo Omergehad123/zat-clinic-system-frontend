@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useEmployees } from '../../../hooks/useEmployees';
 import { useUIStore } from '../../../store/useUIStore';
-import { UserCheck, Stethoscope, HeartHandshake, Shield, Wrench, Plus, Filter } from 'lucide-react';
+import { UserCheck, Stethoscope, HeartHandshake, Shield, Wrench, Plus, Filter, Pencil, Trash2 } from 'lucide-react';
 
 export default function EmployeesPage() {
   const [typeFilter, setTypeFilter] = useState('ALL');
@@ -154,7 +154,22 @@ export default function EmployeesPage() {
                         </span>
                       </td>
                       <td className="mono-table-td text-center">
-                        <span className="text-xs text-zinc-400">مسجل بالفرع</span>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => openModal('EDIT_EMPLOYEE', emp)}
+                            title="تعديل بيانات الموظف"
+                            className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => openModal('DELETE_EMPLOYEE', emp)}
+                            title="حذف الموظف من الفرع والنظام"
+                            className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 hover:bg-rose-950/40 hover:border-rose-800/50 text-zinc-400 hover:text-rose-400 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

@@ -41,6 +41,13 @@ export const employeesService = {
     return res.data;
   },
 
+  deleteEmployee: async (id) => {
+    const res = await apiFetch(`/employees/${id}`, {
+      method: 'DELETE'
+    });
+    return res;
+  },
+
   toggleEmployeeStatus: async (id) => {
     const res = await apiFetch(`/employees/${id}`, {
       method: 'DELETE'
