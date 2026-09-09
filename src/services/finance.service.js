@@ -16,9 +16,25 @@ export const financeService = {
       query += `month=${filters.month}&year=${filters.year}&`;
     }
 
-    const res = await apiFetch(`/transactions${query}`);
-    const rawTransactions = res.data || [];
-    const summary = res.summary || { totalIncome: 0, totalExpenses: 0, netIncome: 0 };
+    const [res, patientsRes] = await Promise.all([
+      apiFetch(`/transactions${query}`),
+      apiFetch(`/patients${branchId && branchId !== 'all' ? `?branchId=${branchId}` : ''}`).catch(() => ({ data: [] }))
+    ]);
+    const rawTransactions = res?.data || [];
+    const patients = patientsRes?.data || [];
+    const summary = res?.summary || { totalIncome: 0, totalExpenses: 0, netIncome: 0 };
+
+    // حساب إجمالي الإيرادات بناءً على صافي الإيرادات لكل مريض/نزيل (صافي الإيرادات = قيمة الإقامة - مصاريف النزيل)
+    const patientNetRevenueTotal = patients.reduce((sum, p) => {
+      const net = p.netRevenue !== undefined && p.netRevenue !== null
+        ? Number(p.netRevenue)
+        : (Number(p.accommodationAmount ?? p.stayValue ?? 0) - Number(p.totalExpenses ?? p.expensesTotal ?? 0));
+      return sum + net;
+    }, 0);
+
+    const calculatedTotalIncome = patients.length > 0 ? patientNetRevenueTotal : (summary.totalIncome || 0);
+    const calculatedTotalExpenses = summary.totalExpenses || 0;
+    const calculatedNetRevenue = calculatedTotalIncome - calculatedTotalExpenses;
 
     const income = rawTransactions
       .filter(t => t.type === 'income')
@@ -67,9 +83,9 @@ export const financeService = {
       expenses,
       transactions,
       totals: {
-        totalIncome: summary.totalIncome || 0,
-        totalExpenses: summary.totalExpenses || 0,
-        netRevenue: summary.netIncome || 0,
+        totalIncome: calculatedTotalIncome,
+        totalExpenses: calculatedTotalExpenses,
+        netRevenue: calculatedNetRevenue,
         advancesTotal
       }
     };

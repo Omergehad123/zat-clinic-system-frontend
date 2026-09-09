@@ -65,9 +65,15 @@ export default function DashboardOverviewPage() {
   ).length || 0;
 
   const totalPatientPaid = patients?.reduce((acc, p) => acc + Number(p.paidAmount ?? p.paid ?? 0), 0) || 0;
+  const totalPatientNetRevenue = patients?.reduce((acc, p) => {
+    const net = p.netRevenue !== undefined && p.netRevenue !== null
+      ? Number(p.netRevenue)
+      : (Number(p.accommodationAmount ?? p.stayValue ?? 0) - Number(p.totalExpenses ?? p.expensesTotal ?? 0));
+    return acc + net;
+  }, 0) || 0;
   const totalRevenue = (finance?.totals?.totalIncome !== undefined && finance?.totals?.totalIncome !== null)
     ? finance.totals.totalIncome
-    : (finance?.totals?.totalRevenue || totalPatientPaid);
+    : (totalPatientNetRevenue || finance?.totals?.totalRevenue || totalPatientPaid);
   const totalExpenses = finance?.totals?.totalExpenses || 0;
   const netRevenue = finance?.totals?.netRevenue || (totalRevenue - totalExpenses);
   const totalAdvances = finance?.totals?.advancesTotal || advancesData?.totals?.month || 0;

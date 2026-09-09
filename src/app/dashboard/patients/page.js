@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { usePatients } from '../../../hooks/usePatients';
 import { useUIStore } from '../../../store/useUIStore';
@@ -24,21 +25,74 @@ export default function PatientsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [openActionId, setOpenActionId] = useState(null);
+  const [activePatient, setActivePatient] = useState(null);
+  const [menuPosition, setMenuPosition] = useState(null);
+  const [mounted, setMounted] = useState(false);
 
   const { data: patients, isLoading } = usePatients(search, statusFilter);
   const openModal = useUIStore(s => s.openModal);
   const dropdownRef = useRef(null);
 
-  // Close dropdown on outside click
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Close dropdown on outside click, window scroll or resize
+  useEffect(() => {
+    if (!openActionId) return;
+
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setOpenActionId(null);
+        setActivePatient(null);
+        setMenuPosition(null);
       }
     };
+
+    const handleScrollOrResize = () => {
+      setOpenActionId(null);
+      setActivePatient(null);
+      setMenuPosition(null);
+    };
+
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    window.addEventListener('scroll', handleScrollOrResize, true);
+    window.addEventListener('resize', handleScrollOrResize);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+      window.removeEventListener('resize', handleScrollOrResize);
+    };
+  }, [openActionId]);
+
+  const toggleActionMenu = (e, patient) => {
+    e.stopPropagation();
+    if (openActionId === patient.id) {
+      setOpenActionId(null);
+      setActivePatient(null);
+      setMenuPosition(null);
+    } else {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const menuWidth = 208; // w-52
+      const menuHeight = 220;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const openUpwards = spaceBelow < menuHeight && rect.top > menuHeight;
+
+      let left = rect.right - menuWidth;
+      if (left < 10) left = rect.left;
+      if (left + menuWidth > window.innerWidth - 10) {
+        left = window.innerWidth - menuWidth - 10;
+      }
+
+      setMenuPosition({
+        top: openUpwards ? rect.top - 6 : rect.bottom + 6,
+        left: Math.max(10, left),
+        openUpwards
+      });
+      setOpenActionId(patient.id);
+      setActivePatient(patient);
+    }
+  };
 
   const getStatusBadge = (status) => {
     switch (status) {
@@ -201,90 +255,18 @@ export default function PatientsPage() {
                         </div>
                       </td>
                       <td className="mono-table-td">{getStatusBadge(patient.status)}</td>
-                      <td className="mono-table-td text-center relative">
-                        {/* Action Box Dropdown Button */}
-                        <div className="relative inline-block text-right" ref={isOpen ? dropdownRef : null}>
-                          <button
-                            onClick={() => setOpenActionId(isOpen ? null : patient.id)}
-                            className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 hover:border-zinc-500 rounded-lg text-xs font-bold text-zinc-200 transition-all flex items-center gap-1.5 shadow-sm"
-                          >
-                            <span>الإجراءات</span>
-                            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-                          </button>
-
-                          {/* Action Dropdown Popup Menu */}
-                          {isOpen && (
-                            <div className="absolute left-0 mt-2 w-48 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl z-30 overflow-hidden dir-rtl divide-y divide-zinc-800 animate-fade-in">
-                              <div className="py-1">
-                                <Link
-                                  href={`/dashboard/patients/${patient.id}`}
-                                  onClick={() => setOpenActionId(null)}
-                                  className="w-full text-right px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-800 hover:text-white flex items-center gap-2 transition-colors font-medium"
-                                >
-                                  <Eye className="w-3.5 h-3.5 text-zinc-400" />
-                                  <span>عرض الملف بالتفصيل</span>
-                                </Link>
-                                <button
-                                  onClick={() => {
-                                    setOpenActionId(null);
-                                    openModal('ADD_PAYMENT', { ...patient, patientId: patient.id, patientName: patient.name });
-                                  }}
-                                  className="w-full text-right px-3 py-2 text-xs text-emerald-400 hover:bg-emerald-500/10 flex items-center gap-2 transition-colors font-medium"
-                                >
-                                  <DollarSign className="w-3.5 h-3.5" />
-                                  <span>إضافة دفعة سداد</span>
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setOpenActionId(null);
-                                    openModal('ADD_PATIENT_EXPENSE', { ...patient, patientId: patient.id, patientName: patient.name });
-                                  }}
-                                  className="w-full text-right px-3 py-2 text-xs text-amber-400 hover:bg-amber-500/10 flex items-center gap-2 transition-colors font-medium"
-                                >
-                                  <Receipt className="w-3.5 h-3.5" />
-                                  <span>إضافة مصروف نزيل</span>
-                                </button>
-                              </div>
-
-                              <div className="py-1">
-                                {patient.status !== 'خرج' && patient.status !== 'discharged' ? (
-                                  <button
-                                    onClick={() => {
-                                      setOpenActionId(null);
-                                      openModal('DISCHARGE_PATIENT', patient);
-                                    }}
-                                    className="w-full text-right px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white flex items-center gap-2 transition-colors font-medium"
-                                  >
-                                    <LogOut className="w-3.5 h-3.5 text-zinc-400" />
-                                    <span>تسجيل خروج النزيل</span>
-                                  </button>
-                                ) : (
-                                  <button
-                                    onClick={() => {
-                                      setOpenActionId(null);
-                                      openModal('RENEW_PATIENT', patient);
-                                    }}
-                                    className="w-full text-right px-3 py-2 text-xs text-emerald-400 hover:bg-emerald-500/10 flex items-center gap-2 transition-colors font-medium"
-                                  >
-                                    <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
-                                    <span>تجديد الإقامة (إعادة دخول)</span>
-                                  </button>
-                                )}
-
-                                <button
-                                  onClick={() => {
-                                    setOpenActionId(null);
-                                    openModal('EDIT_PATIENT', patient);
-                                  }}
-                                  className="w-full text-right px-3 py-2 text-xs text-blue-400 hover:bg-blue-500/10 flex items-center gap-2 transition-colors font-medium"
-                                >
-                                  <Pencil className="w-3.5 h-3.5" />
-                                  <span>تعديل بيانات النزيل</span>
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
+                      <td className="mono-table-td text-center">
+                        <button
+                          onClick={(e) => toggleActionMenu(e, patient)}
+                          className={`px-3 py-1.5 border rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 shadow-sm ${
+                            openActionId === patient.id 
+                              ? 'bg-zinc-800 border-zinc-500 text-white' 
+                              : 'bg-zinc-900 hover:bg-zinc-800 border-zinc-700 hover:border-zinc-500 text-zinc-200'
+                          }`}
+                        >
+                          <span>الإجراءات</span>
+                          <ChevronDown className={`w-3.5 h-3.5 transition-transform ${openActionId === patient.id ? 'rotate-180' : ''}`} />
+                        </button>
                       </td>
                     </tr>
                   );
@@ -294,6 +276,100 @@ export default function PatientsPage() {
           </table>
         </div>
       </div>
+
+      {/* Floating Action Menu rendered in Portal outside table DOM */}
+      {mounted && openActionId && activePatient && menuPosition && createPortal(
+        <div
+          ref={dropdownRef}
+          style={{
+            position: 'fixed',
+            top: menuPosition.openUpwards ? undefined : `${menuPosition.top}px`,
+            bottom: menuPosition.openUpwards ? `${window.innerHeight - menuPosition.top}px` : undefined,
+            left: `${menuPosition.left}px`,
+            zIndex: 99999
+          }}
+          className="w-52 bg-zinc-900 border border-zinc-700/90 rounded-xl shadow-2xl overflow-hidden dir-rtl divide-y divide-zinc-800 animate-fade-in text-right"
+        >
+          <div className="py-1">
+            <Link
+              href={`/dashboard/patients/${activePatient.id}`}
+              onClick={() => { setOpenActionId(null); setActivePatient(null); setMenuPosition(null); }}
+              className="w-full text-right px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-800 hover:text-white flex items-center gap-2 transition-colors font-medium"
+            >
+              <Eye className="w-3.5 h-3.5 text-zinc-400" />
+              <span>عرض الملف بالتفصيل</span>
+            </Link>
+            <button
+              onClick={() => {
+                setOpenActionId(null);
+                setActivePatient(null);
+                setMenuPosition(null);
+                openModal('ADD_PAYMENT', { ...activePatient, patientId: activePatient.id, patientName: activePatient.name });
+              }}
+              className="w-full text-right px-3 py-2 text-xs text-emerald-400 hover:bg-emerald-500/10 flex items-center gap-2 transition-colors font-medium"
+            >
+              <DollarSign className="w-3.5 h-3.5" />
+              <span>إضافة دفعة سداد</span>
+            </button>
+            <button
+              onClick={() => {
+                setOpenActionId(null);
+                setActivePatient(null);
+                setMenuPosition(null);
+                openModal('ADD_PATIENT_EXPENSE', { ...activePatient, patientId: activePatient.id, patientName: activePatient.name });
+              }}
+              className="w-full text-right px-3 py-2 text-xs text-amber-400 hover:bg-amber-500/10 flex items-center gap-2 transition-colors font-medium"
+            >
+              <Receipt className="w-3.5 h-3.5" />
+              <span>إضافة مصروف نزيل</span>
+            </button>
+          </div>
+
+          <div className="py-1">
+            {activePatient.status !== 'خرج' && activePatient.status !== 'discharged' ? (
+              <button
+                onClick={() => {
+                  setOpenActionId(null);
+                  setActivePatient(null);
+                  setMenuPosition(null);
+                  openModal('DISCHARGE_PATIENT', activePatient);
+                }}
+                className="w-full text-right px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white flex items-center gap-2 transition-colors font-medium"
+              >
+                <LogOut className="w-3.5 h-3.5 text-zinc-400" />
+                <span>تسجيل خروج النزيل</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  setOpenActionId(null);
+                  setActivePatient(null);
+                  setMenuPosition(null);
+                  openModal('RENEW_PATIENT', activePatient);
+                }}
+                className="w-full text-right px-3 py-2 text-xs text-emerald-400 hover:bg-emerald-500/10 flex items-center gap-2 transition-colors font-medium"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
+                <span>تجديد الإقامة (إعادة دخول)</span>
+              </button>
+            )}
+
+            <button
+              onClick={() => {
+                setOpenActionId(null);
+                setActivePatient(null);
+                setMenuPosition(null);
+                openModal('EDIT_PATIENT', activePatient);
+              }}
+              className="w-full text-right px-3 py-2 text-xs text-blue-400 hover:bg-blue-500/10 flex items-center gap-2 transition-colors font-medium"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              <span>تعديل بيانات النزيل</span>
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
 
     </div>
   );

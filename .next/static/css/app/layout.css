@@ -633,6 +633,9 @@ video {
 .flex{
   display: flex;
 }
+.inline-flex{
+  display: inline-flex;
+}
 .table{
   display: table;
 }
@@ -759,6 +762,9 @@ video {
 .w-full{
   width: 100%;
 }
+.w-52{
+  width: 13rem;
+}
 .min-w-0{
   min-width: 0px;
 }
@@ -841,6 +847,9 @@ video {
 }
 .cursor-pointer{
   cursor: pointer;
+}
+.resize{
+  resize: both;
 }
 .grid-cols-1{
   grid-template-columns: repeat(1, minmax(0, 1fr));
@@ -1061,6 +1070,9 @@ video {
 .border-zinc-900{
   --tw-border-opacity: 1;
   border-color: rgb(24 24 27 / var(--tw-border-opacity, 1));
+}
+.border-zinc-700\/90{
+  border-color: rgb(63 63 70 / 0.9);
 }
 .border-l-blue-500{
   --tw-border-opacity: 1;

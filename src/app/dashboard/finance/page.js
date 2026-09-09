@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useFinance } from '../../../hooks/useFinance';
+import { usePatients } from '../../../hooks/usePatients';
 import { useUIStore } from '../../../store/useUIStore';
 import { formatCurrency, formatDate } from '../../../utils/formatters';
 import { TrendingUp, TrendingDown, DollarSign, Wallet, Plus, ArrowUpLeft, ArrowDownRight, RefreshCw } from 'lucide-react';
@@ -9,13 +10,41 @@ import { TrendingUp, TrendingDown, DollarSign, Wallet, Plus, ArrowUpLeft, ArrowD
 export default function FinancePage() {
   const [activeTab, setActiveTab] = useState('INCOME'); // 'INCOME' | 'EXPENSES' | 'TRANSACTIONS'
 
-  const { data: finance, isLoading, refetch } = useFinance();
+  const { data: finance, isLoading: loadingFinance, refetch: refetchFinance } = useFinance();
+  const { data: patients, isLoading: loadingPatients, refetch: refetchPatients } = usePatients();
   const openModal = useUIStore(s => s.openModal);
 
-  const totals = finance?.totals || { totalIncome: 0, totalExpenses: 0, netRevenue: 0, advancesTotal: 0 };
+  // حساب إجمالي الإيرادات كصافي الإيرادات لكل مريض (قيمة الإقامة - مصاريف النزيل) وليس قيمة الإقامة فقط
+  const patientNetRevenueTotal = (patients && patients.length > 0)
+    ? patients.reduce((sum, p) => {
+        const net = p.netRevenue !== undefined && p.netRevenue !== null
+          ? Number(p.netRevenue)
+          : (Number(p.accommodationAmount ?? p.stayValue ?? 0) - Number(p.totalExpenses ?? p.expensesTotal ?? 0));
+        return sum + net;
+      }, 0)
+    : (finance?.totals?.totalIncome || 0);
+
+  const totalIncome = patientNetRevenueTotal;
+  const totalExpenses = finance?.totals?.totalExpenses || 0;
+  const netRevenue = totalIncome - totalExpenses;
+  const advancesTotal = finance?.totals?.advancesTotal || 0;
+
+  const totals = {
+    totalIncome,
+    totalExpenses,
+    netRevenue,
+    advancesTotal
+  };
+
   const incomeList = finance?.income || [];
   const expenseList = finance?.expenses || [];
   const transactions = finance?.transactions || [];
+  const isLoading = loadingFinance || loadingPatients;
+
+  const handleRefresh = () => {
+    refetchFinance();
+    refetchPatients();
+  };
 
   return (
     <div className="space-y-6 pb-12">
@@ -36,7 +65,7 @@ export default function FinancePage() {
             إضافة مصروف مباشر
           </button>
           <button
-            onClick={() => refetch()}
+            onClick={handleRefresh}
             className="mono-btn-secondary p-2.5"
             title="تحديث البيانات"
           >
