@@ -240,18 +240,23 @@ export default function PatientsPage() {
                       </td>
                       <td className="mono-table-td">
                         <div className="space-y-0.5">
-                          <div className={`font-bold font-mono text-sm ${
-                            (patient.netRevenue ?? (patient.stayValue - (patient.expensesTotal || 0))) >= 0
-                              ? 'text-emerald-400'
-                              : 'text-rose-400'
-                          }`}>
-                            {formatCurrency(patient.netRevenue ?? ((patient.stayValue || 0) - (patient.expensesTotal || 0)))}
-                          </div>
-                          {(patient.expensesTotal > 0) && (
-                            <div className="text-[10px] text-zinc-500">
-                              مصاريف: {formatCurrency(patient.expensesTotal)}
-                            </div>
-                          )}
+                          {(() => {
+                            const paid     = Number(patient.paidAmount   ?? patient.paid          ?? 0);
+                            const expenses = Number(patient.totalExpenses ?? patient.expensesTotal ?? 0);
+                            const net      = paid - expenses;
+                            return (
+                              <>
+                                <div className={`font-bold font-mono text-sm ${net >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                  {formatCurrency(net)}
+                                </div>
+                                {expenses > 0 && (
+                                  <div className="text-[10px] text-zinc-500">
+                                    مصاريف: {formatCurrency(expenses)}
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
                         </div>
                       </td>
                       <td className="mono-table-td">{getStatusBadge(patient.status)}</td>

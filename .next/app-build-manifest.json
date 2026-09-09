@@ -21,25 +21,20 @@
       "static/chunks/main-app.js",
       "static/chunks/app/dashboard/layout.js"
     ],
-    "/dashboard/invoices/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/invoices/page.js"
-    ],
-    "/dashboard/finance/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/finance/page.js"
-    ],
     "/dashboard/patients/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/dashboard/patients/page.js"
     ],
-    "/dashboard/advances/page": [
+    "/dashboard/employees/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/advances/page.js"
+      "static/chunks/app/dashboard/employees/page.js"
+    ],
+    "/dashboard/finance/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/dashboard/finance/page.js"
     ]
   }
 }

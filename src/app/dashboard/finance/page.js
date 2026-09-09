@@ -14,13 +14,12 @@ export default function FinancePage() {
   const { data: patients, isLoading: loadingPatients, refetch: refetchPatients } = usePatients();
   const openModal = useUIStore(s => s.openModal);
 
-  // حساب إجمالي الإيرادات كصافي الإيرادات لكل مريض (قيمة الإقامة - مصاريف النزيل) وليس قيمة الإقامة فقط
+  // صافي الإيرادات = المدفوع - مصاريف النزيل (أي بعد خصم المتبقي)
   const patientNetRevenueTotal = (patients && patients.length > 0)
     ? patients.reduce((sum, p) => {
-        const net = p.netRevenue !== undefined && p.netRevenue !== null
-          ? Number(p.netRevenue)
-          : (Number(p.accommodationAmount ?? p.stayValue ?? 0) - Number(p.totalExpenses ?? p.expensesTotal ?? 0));
-        return sum + net;
+        const paid     = Number(p.paidAmount   ?? p.paid          ?? 0);
+        const expenses = Number(p.totalExpenses ?? p.expensesTotal ?? 0);
+        return sum + (paid - expenses);
       }, 0)
     : (finance?.totals?.totalIncome || 0);
 

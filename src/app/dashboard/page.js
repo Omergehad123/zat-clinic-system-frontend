@@ -66,10 +66,9 @@ export default function DashboardOverviewPage() {
 
   const totalPatientPaid = patients?.reduce((acc, p) => acc + Number(p.paidAmount ?? p.paid ?? 0), 0) || 0;
   const totalPatientNetRevenue = patients?.reduce((acc, p) => {
-    const net = p.netRevenue !== undefined && p.netRevenue !== null
-      ? Number(p.netRevenue)
-      : (Number(p.accommodationAmount ?? p.stayValue ?? 0) - Number(p.totalExpenses ?? p.expensesTotal ?? 0));
-    return acc + net;
+    const paid     = Number(p.paidAmount   ?? p.paid          ?? 0);
+    const expenses = Number(p.totalExpenses ?? p.expensesTotal ?? 0);
+    return acc + (paid - expenses);
   }, 0) || 0;
   const totalRevenue = (finance?.totals?.totalIncome !== undefined && finance?.totals?.totalIncome !== null)
     ? finance.totals.totalIncome

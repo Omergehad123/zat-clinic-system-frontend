@@ -24,11 +24,12 @@ export const financeService = {
     const patients = patientsRes?.data || [];
     const summary = res?.summary || { totalIncome: 0, totalExpenses: 0, netIncome: 0 };
 
-    // حساب إجمالي الإيرادات بناءً على صافي الإيرادات لكل مريض/نزيل (صافي الإيرادات = قيمة الإقامة - مصاريف النزيل)
+    // حساب إجمالي الإيرادات بناءً على صافي الإيرادات لكل مريض/نزيل
+    // صافي الإيرادات = قيمة الإقامة - مصاريف النزيل - المتبقي = المدفوع - مصاريف النزيل
     const patientNetRevenueTotal = patients.reduce((sum, p) => {
-      const net = p.netRevenue !== undefined && p.netRevenue !== null
-        ? Number(p.netRevenue)
-        : (Number(p.accommodationAmount ?? p.stayValue ?? 0) - Number(p.totalExpenses ?? p.expensesTotal ?? 0));
+      const paid    = Number(p.paidAmount   ?? p.paid          ?? 0);
+      const expenses = Number(p.totalExpenses ?? p.expensesTotal ?? 0);
+      const net = paid - expenses;
       return sum + net;
     }, 0);
 

@@ -193,14 +193,17 @@ export default function PatientDetailPage() {
 
         <div className="mono-card p-4">
           <span className="text-xs font-semibold text-zinc-400">صافي الإيرادات</span>
-          <div className="text-[10px] text-zinc-500 mt-0.5">قيمة الإقامة − المصاريف</div>
-          <div className={`text-xl font-black mt-1.5 ${
-            (patient.netRevenue ?? ((patient.stayValue || 0) - (patient.expensesTotal || 0))) >= 0
-              ? 'text-emerald-400'
-              : 'text-rose-400'
-          }`}>
-            {formatCurrency(patient.netRevenue ?? ((patient.stayValue || 0) - (patient.expensesTotal || 0)))}
-          </div>
+          <div className="text-[10px] text-zinc-500 mt-0.5">المدفوع − مصاريف النزيل</div>
+          {(() => {
+            const paid     = Number(patient.paidAmount   ?? patient.paid          ?? 0);
+            const expenses = Number(patient.totalExpenses ?? patient.expensesTotal ?? 0);
+            const net      = paid - expenses;
+            return (
+              <div className={`text-xl font-black mt-1.5 ${net >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {formatCurrency(net)}
+              </div>
+            );
+          })()}
         </div>
 
       </div>
@@ -302,13 +305,16 @@ export default function PatientDetailPage() {
             </div>
             <div>
               <span className="text-xs text-zinc-400 block mb-1">صافي الإيرادات:</span>
-              <span className={`text-lg font-black font-mono ${
-                (patient.netRevenue ?? ((patient.stayValue || 0) - (patient.expensesTotal || 0))) >= 0
-                  ? 'text-emerald-400'
-                  : 'text-rose-400'
-              }`}>
-                {formatCurrency(patient.netRevenue ?? ((patient.stayValue || 0) - (patient.expensesTotal || 0)))}
-              </span>
+              {(() => {
+                const paid     = Number(patient.paidAmount   ?? patient.paid          ?? 0);
+                const expenses = Number(patient.totalExpenses ?? patient.expensesTotal ?? 0);
+                const net      = paid - expenses;
+                return (
+                  <span className={`text-lg font-black font-mono ${net >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {formatCurrency(net)}
+                  </span>
+                );
+              })()}
             </div>
           </div>
 
