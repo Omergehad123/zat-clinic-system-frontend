@@ -26,10 +26,24 @@ export const reportsService = {
         totalAdvances: data.employeeMetrics?.advancesTotal || 0,
         totalOutstanding: data.patientMetrics?.outstandingPayments || 0
       },
-      categoryBreakdown: Object.entries(data.expenseBreakdown || {}).map(([name, value]) => ({
-        name,
-        value
-      })),
+      categoryBreakdown: Object.entries(data.expenseBreakdown || {})
+        .filter(([_, val]) => Number(val) > 0)
+        .map(([name, value]) => {
+          const categoryTranslations = {
+            Advances: 'سلف موظفين',
+            PatientExpenses: 'مصاريف نزلاء',
+            Food: 'أغذية ومشروبات',
+            Medicine: 'أدوية وعلاج',
+            Utilities: 'فواتير ومرافق',
+            Maintenance: 'صيانة',
+            Supplies: 'مستلزمات',
+            Other: 'مصروفات أخرى'
+          };
+          return {
+            name: categoryTranslations[name] || name,
+            value: Number(value) || 0
+          };
+        }),
       patientStats: {
         current: data.patientMetrics?.current || 0,
         newCount: data.patientMetrics?.newCount || 0,
