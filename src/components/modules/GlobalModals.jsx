@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useUIStore } from '../../store/useUIStore';
-import { useAddPatient, useAddPayment, useAddPatientExpense, useDischargePatient, useDeletePatient, useUpdatePatient } from '../../hooks/usePatients';
+import { useAddPatient, useAddPayment, useAddPatientExpense, useDischargePatient, useDeletePatient, useUpdatePatient, useRenewPatient } from '../../hooks/usePatients';
 import { useAddEmployee, useUpdateEmployee, useDeleteEmployee, useEmployees } from '../../hooks/useEmployees';
 import { useAddAdvance } from '../../hooks/useAdvances';
 import { useCreateInvoice, useUpdateInvoice } from '../../hooks/useInvoices';
@@ -15,6 +15,7 @@ export default function GlobalModals() {
 
   const addPatientMutation = useAddPatient();
   const updatePatientMutation = useUpdatePatient();
+  const renewPatientMutation = useRenewPatient();
   const addPaymentMutation = useAddPayment();
   const addPatientExpenseMutation = useAddPatientExpense();
   const dischargePatientMutation = useDischargePatient();
@@ -98,8 +99,9 @@ export default function GlobalModals() {
   const [renewEntryDate, setRenewEntryDate] = useState(new Date().toISOString().split('T')[0]);
   const [renewExpectedExit, setRenewExpectedExit] = useState('');
   const [renewStayValue, setRenewStayValue] = useState('');
+  const [renewMode, setRenewMode] = useState('add');
   const [renewFirstPayment, setRenewFirstPayment] = useState('');
-  const [renewExpenseDeposit, setRenewExpenseDeposit] = useState('');
+  const [renewPaymentMethod, setRenewPaymentMethod] = useState('كاش');
   const [renewNotes, setRenewNotes] = useState('');
 
   // Reset/Prefill helper
@@ -131,9 +133,10 @@ export default function GlobalModals() {
     if (activeModal === 'RENEW_PATIENT' && modalData) {
       setRenewEntryDate(new Date().toISOString().split('T')[0]);
       setRenewExpectedExit('');
-      setRenewStayValue(modalData.stayValue ?? modalData.accommodationAmount ?? '');
+      setRenewStayValue('');
+      setRenewMode('add');
       setRenewFirstPayment('');
-      setRenewExpenseDeposit('');
+      setRenewPaymentMethod('كاش');
       setRenewNotes('');
     }
     if (activeModal === 'ADD_EMPLOYEE') {
@@ -444,132 +447,197 @@ export default function GlobalModals() {
         )}
 
         {/* 1.6. RENEW PATIENT MODAL */}
-        {activeModal === 'RENEW_PATIENT' && (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const patientId = modalData?.id || modalData?._id;
-              updatePatientMutation.mutate(
-                {
-                  id: patientId,
-                  data: {
-                    status: 'current',
-                    entryDate: renewEntryDate,
-                    exitDate: renewExpectedExit || null,
-                    accommodationAmount: Number(renewStayValue) || 0,
-                    expenseDeposit: renewExpenseDeposit !== '' ? Number(renewExpenseDeposit) : (modalData?.expenseDeposit || 0),
-                    notes: renewNotes
-                      ? `${modalData?.notes || ''}\n[تجديد إقامة بتاريخ ${renewEntryDate}]: ${renewNotes}`
-                      : (modalData?.notes || '')
-                  }
-                },
-                {
-                  onSuccess: () => {
-                    if (Number(renewFirstPayment) > 0) {
-                      addPaymentMutation.mutate({
-                        patientId,
-                        amount: Number(renewFirstPayment),
-                        paymentMethod: 'كاش',
-                        date: renewEntryDate,
-                        notes: 'دفعة أولى عند تجديد الإقامة'
-                      });
+        {activeModal === 'RENEW_PATIENT' && (() => {
+          const prevStay = Number(modalData?.stayValue ?? modalData?.accommodationAmount ?? 0);
+          const addStay = Number(renewStayValue) || 0;
+          const newTotalStay = renewMode === 'replace' ? addStay : (prevStay + addStay);
+          const firstPay = Number(renewFirstPayment) || 0;
+          const remainingAfter = Math.max(0, newTotalStay - ((Number(modalData?.paidAmount ?? modalData?.paid ?? 0)) + firstPay));
+
+          return (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const patientId = modalData?.id || modalData?._id;
+                renewPatientMutation.mutate(
+                  {
+                    id: patientId,
+                    data: {
+                      renewDate: renewEntryDate,
+                      expectedExitDate: renewExpectedExit || null,
+                      accommodationAmount: addStay,
+                      mode: renewMode,
+                      firstPayment: firstPay,
+                      paymentMethod: renewPaymentMethod,
+                      notes: renewNotes
                     }
-                    closeModal();
+                  },
+                  {
+                    onSuccess: () => {
+                      closeModal();
+                    }
                   }
-                }
-              );
-            }}
-            className="space-y-4"
-          >
-            <div>
-              <label className="block text-xs font-semibold text-zinc-300 mb-1.5">اسم النزيل</label>
-              <input
-                type="text"
-                disabled
-                value={modalData?.name || ''}
-                className="mono-input text-sm opacity-70 bg-zinc-950 text-zinc-400"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">تاريخ الدخول الجديد *</label>
-                <input
-                  type="date"
-                  required
-                  value={renewEntryDate}
-                  onChange={(e) => setRenewEntryDate(e.target.value)}
-                  className="mono-input text-xs dir-ltr"
-                />
+                );
+              }}
+              className="space-y-4"
+            >
+              {/* Patient Badge */}
+              <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-xl flex items-center justify-between">
+                <div>
+                  <span className="text-[11px] text-zinc-500 block">النزيل المستهدف:</span>
+                  <strong className="text-white text-sm">{modalData?.name}</strong>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`px-2.5 py-0.5 text-xs font-semibold rounded-full ${
+                    modalData?.status === 'حالي' ? 'bg-white text-black' : 'bg-zinc-800 text-zinc-300 border border-zinc-700'
+                  }`}>
+                    {modalData?.status || 'حالي'}
+                  </span>
+                  <span className="text-xs text-zinc-400 font-mono">#{modalData?.id?.slice(-6) || modalData?._id?.slice(-6)}</span>
+                </div>
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">تاريخ الخروج المتوقع</label>
-                <input
-                  type="date"
-                  value={renewExpectedExit}
-                  onChange={(e) => setRenewExpectedExit(e.target.value)}
-                  className="mono-input text-xs dir-ltr"
-                />
-              </div>
-            </div>
 
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">قيمة الإقامة (جنيه) *</label>
+              {/* Dates */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1.5">تاريخ التجديد / بدء المدة *</label>
+                  <input
+                    type="date"
+                    required
+                    value={renewEntryDate}
+                    onChange={(e) => setRenewEntryDate(e.target.value)}
+                    className="mono-input text-xs dir-ltr"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1.5">تاريخ الخروج المتوقع</label>
+                  <input
+                    type="date"
+                    value={renewExpectedExit}
+                    onChange={(e) => setRenewExpectedExit(e.target.value)}
+                    className="mono-input text-xs dir-ltr"
+                  />
+                </div>
+              </div>
+
+              {/* Stay Value & Mode */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-zinc-300">
+                    قيمة التجديد / الإقامة المضافة (جنيه) *
+                  </label>
+                  <div className="flex items-center gap-1 bg-zinc-950 p-1 border border-zinc-800 rounded-lg">
+                    <button
+                      type="button"
+                      onClick={() => setRenewMode('add')}
+                      className={`px-2 py-0.5 text-[11px] rounded transition-all font-medium ${
+                        renewMode === 'add' ? 'bg-zinc-800 text-white font-bold' : 'text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      إضافة للمبلغ السابق
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRenewMode('replace')}
+                      className={`px-2 py-0.5 text-[11px] rounded transition-all font-medium ${
+                        renewMode === 'replace' ? 'bg-zinc-800 text-white font-bold' : 'text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      مبلغ كلي جديد
+                    </button>
+                  </div>
+                </div>
+
                 <input
                   type="number"
                   required
                   min="0"
                   value={renewStayValue}
                   onChange={(e) => setRenewStayValue(e.target.value)}
-                  placeholder="10000"
-                  className="mono-input text-sm dir-ltr"
+                  placeholder="مثال: 15000"
+                  className="mono-input text-sm dir-ltr font-mono"
                 />
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">دفعة أولى (اختياري)</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={renewFirstPayment}
-                  onChange={(e) => setRenewFirstPayment(e.target.value)}
-                  placeholder="0"
-                  className="mono-input text-sm dir-ltr"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">وديعة مصاريف (اختياري)</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={renewExpenseDeposit}
-                  onChange={(e) => setRenewExpenseDeposit(e.target.value)}
-                  placeholder="0"
-                  className="mono-input text-sm dir-ltr"
-                />
-              </div>
-            </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-zinc-300 mb-1.5">ملاحظات التجديد</label>
-              <textarea
-                rows="3"
-                value={renewNotes}
-                onChange={(e) => setRenewNotes(e.target.value)}
-                placeholder="سبب التجديد أو ملاحظات الاتفاق الجديد..."
-                className="mono-input text-xs"
-              />
-            </div>
+              {/* First Payment & Method */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1.5">الدفعة المسددة الآن (اختياري)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={renewFirstPayment}
+                    onChange={(e) => setRenewFirstPayment(e.target.value)}
+                    placeholder="0"
+                    className="mono-input text-sm dir-ltr font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1.5">طريقة الدفع</label>
+                  <select
+                    value={renewPaymentMethod}
+                    onChange={(e) => setRenewPaymentMethod(e.target.value)}
+                    className="mono-input text-xs"
+                    disabled={!Number(renewFirstPayment)}
+                  >
+                    <option value="كاش">كاش</option>
+                    <option value="تحويل بنكي">تحويل بنكي</option>
+                    <option value="فودافون كاش">فودافون كاش / إنستاباي</option>
+                    <option value="فيزا">فيزا / بطاقة</option>
+                  </select>
+                </div>
+              </div>
 
-            <div className="pt-3 flex items-center justify-end gap-3">
-              <button type="button" onClick={closeModal} className="mono-btn-secondary text-xs">إلغاء</button>
-              <button type="submit" disabled={updatePatientMutation.isPending} className="mono-btn-primary text-xs flex items-center gap-1.5">
-                <RotateCcw className="w-3.5 h-3.5" />
-                {updatePatientMutation.isPending ? 'جاري التجديد...' : 'تأكيد تجديد الإقامة'}
-              </button>
-            </div>
-          </form>
-        )}
+              {/* Live Financial Calculation Box */}
+              <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-xl space-y-1.5 text-xs">
+                <div className="flex items-center justify-between text-zinc-400">
+                  <span>إجمالي قيمة الإقامة السابقة:</span>
+                  <span className="font-mono text-zinc-300">{formatCurrency(prevStay)}</span>
+                </div>
+                {addStay > 0 && (
+                  <div className="flex items-center justify-between text-zinc-400">
+                    <span>{renewMode === 'add' ? '+ قيمة التجديد المضافة:' : 'القيمة الجديدة المستبدلة:'}</span>
+                    <span className="font-mono font-semibold text-emerald-400">+{formatCurrency(addStay)}</span>
+                  </div>
+                )}
+                <div className="pt-1.5 border-t border-zinc-850 flex items-center justify-between font-bold text-white">
+                  <span>إجمالي الإقامة بعد التجديد:</span>
+                  <span className="font-mono text-sm text-white">{formatCurrency(newTotalStay)}</span>
+                </div>
+                {firstPay > 0 && (
+                  <div className="flex items-center justify-between text-zinc-400 pt-1">
+                    <span>دفعة مسددة فورية:</span>
+                    <span className="font-mono font-semibold text-emerald-400">-{formatCurrency(firstPay)}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">ملاحظات التجديد</label>
+                <textarea
+                  rows="2"
+                  value={renewNotes}
+                  onChange={(e) => setRenewNotes(e.target.value)}
+                  placeholder="مثال: تجديد حجز لشهر إضافي - اتفاق مع ولي الأمر..."
+                  className="mono-input text-xs"
+                />
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-3">
+                <button type="button" onClick={closeModal} className="mono-btn-secondary text-xs">إلغاء</button>
+                <button
+                  type="submit"
+                  disabled={renewPatientMutation.isPending}
+                  className="mono-btn-primary text-xs flex items-center gap-1.5"
+                >
+                  <RotateCcw className={`w-3.5 h-3.5 ${renewPatientMutation.isPending ? 'animate-spin' : ''}`} />
+                  {renewPatientMutation.isPending ? 'جاري التجديد...' : 'تأكيد تجديد الإقامة'}
+                </button>
+              </div>
+            </form>
+          );
+        })()}
 
         {/* 2. ADD EMPLOYEE MODAL */}
         {activeModal === 'ADD_EMPLOYEE' && (

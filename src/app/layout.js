@@ -8,8 +8,8 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="ar" dir="rtl">
-      <body className="bg-zinc-950 text-zinc-100 min-h-screen font-cairo antialiased">
+    <html lang="ar" dir="rtl" suppressHydrationWarning>
+      <body className="bg-zinc-950 text-zinc-100 min-h-screen font-cairo antialiased" suppressHydrationWarning>
         <Providers>
           {children}
         </Providers>

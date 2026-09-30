@@ -39,6 +39,14 @@ export const patientsService = {
     return patientsService.createPatient(patientData, branchId);
   },
 
+  renewPatient: async (id, renewData) => {
+    const res = await apiFetch(`/patients/${id}/renew`, {
+      method: 'POST',
+      body: JSON.stringify(renewData)
+    });
+    return res.data;
+  },
+
   updatePatient: async (id, patientData) => {
     const res = await apiFetch(`/patients/${id}`, {
       method: 'PUT',
@@ -47,10 +55,10 @@ export const patientsService = {
     return res.data;
   },
 
-  dischargePatient: async (id, exitDate) => {
+  dischargePatient: async (id, exitDate, notes) => {
     const res = await apiFetch(`/patients/${id}`, {
       method: 'DELETE',
-      body: JSON.stringify({ exitDate })
+      body: JSON.stringify({ exitDate, notes })
     });
     return res;
   },

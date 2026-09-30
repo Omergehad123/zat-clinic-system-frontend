@@ -42,6 +42,25 @@ export const useAddPatient = () => {
   });
 };
 
+export const useRenewPatient = () => {
+  const queryClient = useQueryClient();
+  const showToast = useUIStore(s => s.showToast);
+
+  return useMutation({
+    mutationFn: ({ id, data }) => patientsService.renewPatient(id, data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['patient', variables.id] });
+      queryClient.invalidateQueries({ queryKey: ['patients'] });
+      queryClient.invalidateQueries({ queryKey: ['finance'] });
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
+      showToast('تم تجديد حجز وإقامة النزيل بنجاح', 'success');
+    },
+    onError: (err) => {
+      showToast(err.message || 'حدث خطأ أثناء تجديد الإقامة', 'error');
+    }
+  });
+};
+
 export const useAddPayment = () => {
   const queryClient = useQueryClient();
   const showToast = useUIStore(s => s.showToast);
@@ -77,10 +96,11 @@ export const useDischargePatient = () => {
   const showToast = useUIStore(s => s.showToast);
 
   return useMutation({
-    mutationFn: ({ patientId, exitDate }) => patientsService.dischargePatient(patientId, exitDate),
+    mutationFn: ({ patientId, exitDate, notes }) => patientsService.dischargePatient(patientId, exitDate, notes),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['patient', variables.patientId] });
       queryClient.invalidateQueries({ queryKey: ['patients'] });
+      queryClient.invalidateQueries({ queryKey: ['finance'] });
       showToast('تم تسجيل خروج النزيل بنجاح', 'success');
     }
   });

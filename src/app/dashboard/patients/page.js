@@ -189,13 +189,14 @@ export default function PatientsPage() {
       {/* Patients Responsive Table */}
       <div className="mono-card overflow-hidden">
         <div className="overflow-x-auto max-w-full">
-          <table className="w-full text-right border-collapse min-w-[900px]">
+          <table className="w-full text-right border-collapse min-w-[950px]">
             <thead>
               <tr>
                 <th className="mono-table-th">الاسم</th>
                 <th className="mono-table-th">تاريخ الدخول</th>
+                <th className="mono-table-th">تاريخ التجديد</th>
                 <th className="mono-table-th">تاريخ الخروج</th>
-                      <th className="mono-table-th">قيمة الإقامة</th>
+                <th className="mono-table-th">قيمة الإقامة</th>
                 <th className="mono-table-th">المدفوع</th>
                 <th className="mono-table-th">المتبقي</th>
                 <th className="mono-table-th">صافي الإيرادات</th>
@@ -206,19 +207,30 @@ export default function PatientsPage() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan="9" className="text-center py-12 text-zinc-500">
+                  <td colSpan="10" className="text-center py-12 text-zinc-500">
                     جاري تحميل بيانات النزلاء...
                   </td>
                 </tr>
               ) : patients?.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="text-center py-12 text-zinc-500">
+                  <td colSpan="10" className="text-center py-12 text-zinc-500">
                     لا يوجد نزلاء يطابقون نتائج البحث أو الفلترة.
                   </td>
                 </tr>
               ) : (
                 patients?.map((patient) => {
                   const isOpen = openActionId === patient.id;
+                  let renewalDate = patient.lastRenewalDate || patient.renewalDate;
+                  if (!renewalDate && Array.isArray(patient.timeline)) {
+                    const ren = patient.timeline.filter(e => e.type === 'renewal');
+                    if (ren.length > 0) renewalDate = ren[ren.length - 1].date;
+                  }
+                  if (!renewalDate && patient.notes) {
+                    const m = patient.notes.match(/\[تجديد إقامة بتاريخ\s+([0-9]{4}-[0-9]{2}-[0-9]{2})\]/);
+                    if (m && m[1]) renewalDate = m[1];
+                  }
+                  const renewalsCount = patient.renewalsCount || (patient.timeline?.filter(e => e.type === 'renewal')?.length || (renewalDate ? 1 : 0));
+
                   return (
                     <tr key={patient.id} className="hover:bg-zinc-900/60 transition-colors">
                       <td className="mono-table-td font-semibold text-white">
@@ -230,6 +242,20 @@ export default function PatientsPage() {
                         </div>
                       </td>
                       <td className="mono-table-td text-zinc-300">{formatDate(patient.entryDate)}</td>
+                      <td className="mono-table-td">
+                        {renewalDate ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-emerald-400 font-semibold">{formatDate(renewalDate)}</span>
+                            {renewalsCount > 1 && (
+                              <span className="text-[10px] px-1.5 py-0.5 bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 rounded font-mono font-bold">
+                                {renewalsCount}x
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-zinc-600 text-xs">-</span>
+                        )}
+                      </td>
                       <td className="mono-table-td text-zinc-400">
                         {patient.exitDate ? formatDate(patient.exitDate) : (patient.expectedExitDate ? `متوقع: ${formatDate(patient.expectedExitDate)}` : '-')}
                       </td>
@@ -331,7 +357,20 @@ export default function PatientsPage() {
           </div>
 
           <div className="py-1">
-            {activePatient.status !== 'خرج' && activePatient.status !== 'discharged' ? (
+            <button
+              onClick={() => {
+                setOpenActionId(null);
+                setActivePatient(null);
+                setMenuPosition(null);
+                openModal('RENEW_PATIENT', activePatient);
+              }}
+              className="w-full text-right px-3 py-2 text-xs text-emerald-400 hover:bg-emerald-500/10 flex items-center gap-2 transition-colors font-medium"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
+              <span>تجديد الإقامة (تمديد الحجز)</span>
+            </button>
+
+            {activePatient.status !== 'خرج' && activePatient.status !== 'discharged' && (
               <button
                 onClick={() => {
                   setOpenActionId(null);
@@ -339,23 +378,10 @@ export default function PatientsPage() {
                   setMenuPosition(null);
                   openModal('DISCHARGE_PATIENT', activePatient);
                 }}
-                className="w-full text-right px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white flex items-center gap-2 transition-colors font-medium"
+                className="w-full text-right px-3 py-2 text-xs text-rose-300 hover:bg-rose-500/10 hover:text-rose-200 flex items-center gap-2 transition-colors font-medium"
               >
-                <LogOut className="w-3.5 h-3.5 text-zinc-400" />
+                <LogOut className="w-3.5 h-3.5 text-rose-400" />
                 <span>تسجيل خروج النزيل</span>
-              </button>
-            ) : (
-              <button
-                onClick={() => {
-                  setOpenActionId(null);
-                  setActivePatient(null);
-                  setMenuPosition(null);
-                  openModal('RENEW_PATIENT', activePatient);
-                }}
-                className="w-full text-right px-3 py-2 text-xs text-emerald-400 hover:bg-emerald-500/10 flex items-center gap-2 transition-colors font-medium"
-              >
-                <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
-                <span>تجديد الإقامة (إعادة دخول)</span>
               </button>
             )}
 
