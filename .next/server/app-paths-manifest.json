@@ -1,6 +1,6 @@
 {
-  "/login/page": "app/login/page.js",
-  "/dashboard/page": "app/dashboard/page.js",
+  "/dashboard/finance/page": "app/dashboard/finance/page.js",
   "/dashboard/patients/page": "app/dashboard/patients/page.js",
-  "/dashboard/patients/[id]/page": "app/dashboard/patients/[id]/page.js"
+  "/dashboard/employees/page": "app/dashboard/employees/page.js",
+  "/dashboard/advances/page": "app/dashboard/advances/page.js"
 }
