@@ -421,8 +421,16 @@ export default function PatientsPage() {
             // Month level stats
             const entriesCount = items.filter(i => i.isEntry).length;
             const renewalsCount = items.filter(i => i.isRenewal).length;
-            const totalMonthPaid = items.reduce((sum, item) => sum + (Number(item.patient.paid) || 0), 0);
-            const totalMonthStay = items.reduce((sum, item) => sum + (Number(item.patient.stayValue) || 0), 0);
+            const totalMonthStay = items.reduce((sum, item) => sum + (Number(item.patient.stayValue ?? item.patient.accommodationAmount) || 0), 0);
+            const totalMonthPaid = items.reduce((sum, item) => sum + (Number(item.patient.paidAmount ?? item.patient.paid) || 0), 0);
+            const totalMonthRemaining = items.reduce((sum, item) => sum + (Number(item.patient.remainingAmount ?? item.patient.remaining) || 0), 0);
+            const totalMonthExpenses = items.reduce((sum, item) => sum + (Number(item.patient.totalExpenses ?? item.patient.expensesTotal) || 0), 0);
+            const totalMonthNet = items.reduce((sum, item) => {
+              const p = item.patient;
+              const paid = Number(p.paidAmount ?? p.paid ?? 0);
+              const exp = Number(p.totalExpenses ?? p.expensesTotal ?? 0);
+              return sum + (paid - exp);
+            }, 0);
 
             return (
               <div 
@@ -481,9 +489,14 @@ export default function PatientsPage() {
                           </span>
                         )}
                         {items.length > 0 && (
-                          <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 font-medium">
-                            المحصل: <strong className="text-white font-mono">{formatCurrency(totalMonthPaid)}</strong>
-                          </span>
+                          <>
+                            <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 font-medium">
+                              المحصل (صافي الإيرادات): <strong className="text-emerald-400 font-mono">{formatCurrency(totalMonthNet)}</strong>
+                            </span>
+                            <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 font-medium">
+                              المدفوع: <strong className="text-zinc-200 font-mono">{formatCurrency(totalMonthPaid)}</strong>
+                            </span>
+                          </>
                         )}
                       </div>
                     </div>
@@ -663,6 +676,44 @@ export default function PatientsPage() {
                               );
                             })}
                           </tbody>
+
+                          {/* Table Footer with exact column totals */}
+                          <tfoot className="border-t-2 border-zinc-700 bg-zinc-900/80 font-bold">
+                            <tr>
+                              <td className="mono-table-td text-white" colSpan={5}>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs uppercase tracking-wider text-zinc-300">إجمالي شهر {titleAr}:</span>
+                                  <span className="text-xs text-zinc-400 font-mono">({items.length} نزيل)</span>
+                                </div>
+                              </td>
+                              {/* Stay Value Total */}
+                              <td className="mono-table-td text-white font-mono text-sm">
+                                {formatCurrency(totalMonthStay)}
+                              </td>
+                              {/* Paid Total */}
+                              <td className="mono-table-td text-zinc-200 font-mono text-sm">
+                                {formatCurrency(totalMonthPaid)}
+                              </td>
+                              {/* Remaining Total */}
+                              <td className={`mono-table-td font-mono text-sm ${totalMonthRemaining > 0 ? 'text-amber-400' : 'text-zinc-500'}`}>
+                                {formatCurrency(totalMonthRemaining)}
+                              </td>
+                              {/* Net Revenue Total */}
+                              <td className="mono-table-td">
+                                <div className={`font-mono text-sm ${totalMonthNet >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                  {formatCurrency(totalMonthNet)}
+                                </div>
+                                {totalMonthExpenses > 0 && (
+                                  <div className="text-[10px] text-zinc-500 font-mono">
+                                    مصاريف: {formatCurrency(totalMonthExpenses)}
+                                  </div>
+                                )}
+                              </td>
+                              {/* Status & Actions fillers */}
+                              <td className="mono-table-td text-zinc-600 text-xs text-center">-</td>
+                              <td className="mono-table-td text-zinc-600 text-xs text-center">-</td>
+                            </tr>
+                          </tfoot>
                         </table>
                       </div>
                     )}

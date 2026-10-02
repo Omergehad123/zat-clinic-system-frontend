@@ -7,6 +7,66 @@ import { useUIStore } from '../../../store/useUIStore';
 import { formatCurrency, formatDate } from '../../../utils/formatters';
 import { TrendingUp, TrendingDown, DollarSign, Wallet, Plus, ArrowUpLeft, ArrowDownRight, RefreshCw } from 'lucide-react';
 
+function formatDateToKey(dateInput) {
+  if (!dateInput) return null;
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return null;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  return `${y}-${m}`;
+}
+
+function calculateAllMonthsFinancials(patientsList) {
+  if (!patientsList || !Array.isArray(patientsList) || patientsList.length === 0) {
+    return { totalPaid: 0, totalPatientExpenses: 0 };
+  }
+  
+  const now = new Date();
+  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const groups = {};
+
+  patientsList.forEach(patient => {
+    // 1. Entry Month
+    const entryKey = formatDateToKey(patient.entryDate || patient.createdAt) || currentMonthKey;
+    if (!groups[entryKey]) groups[entryKey] = [];
+    groups[entryKey].push(patient);
+
+    // 2. Renewal Months from timeline
+    const seenRenewalMonths = new Set();
+    if (Array.isArray(patient.timeline)) {
+      patient.timeline
+        .filter(e => e.type === 'renewal')
+        .forEach((renEvent) => {
+          const renKey = formatDateToKey(renEvent.date);
+          if (renKey && !seenRenewalMonths.has(renKey)) {
+            seenRenewalMonths.add(renKey);
+            if (!groups[renKey]) groups[renKey] = [];
+            groups[renKey].push(patient);
+          }
+        });
+    }
+
+    // Fallback: lastRenewalDate
+    const lastRenKey = formatDateToKey(patient.lastRenewalDate || patient.renewalDate);
+    if (lastRenKey && !seenRenewalMonths.has(lastRenKey)) {
+      seenRenewalMonths.add(lastRenKey);
+      if (!groups[lastRenKey]) groups[lastRenKey] = [];
+      groups[lastRenKey].push(patient);
+    }
+  });
+
+  let totalPaid = 0;
+  let totalPatientExpenses = 0;
+  Object.values(groups).forEach(items => {
+    items.forEach(p => {
+      totalPaid += Number(p.paidAmount ?? p.paid ?? 0);
+      totalPatientExpenses += Number(p.totalExpenses ?? p.expensesTotal ?? 0);
+    });
+  });
+
+  return { totalPaid, totalPatientExpenses };
+}
+
 export default function FinancePage() {
   const [activeTab, setActiveTab] = useState('INCOME'); // 'INCOME' | 'EXPENSES' | 'TRANSACTIONS'
 
@@ -14,19 +74,18 @@ export default function FinancePage() {
   const { data: patients, isLoading: loadingPatients, refetch: refetchPatients } = usePatients();
   const openModal = useUIStore(s => s.openModal);
 
-  // صافي الإيرادات = المدفوع - مصاريف النزيل (أي بعد خصم المتبقي)
-  const patientNetRevenueTotal = (patients && patients.length > 0)
-    ? patients.reduce((sum, p) => {
-        const paid     = Number(p.paidAmount   ?? p.paid          ?? 0);
-        const expenses = Number(p.totalExpenses ?? p.expensesTotal ?? 0);
-        return sum + (paid - expenses);
-      }, 0)
-    : (finance?.totals?.totalIncome || 0);
+  // إجمالي الإيرادات = مجموع عمود "المدفوع" في كافة الشهور (دخول جديد + تجديدات)
+  const { totalPaid: allMonthsPaid, totalPatientExpenses: allMonthsPatientExpenses } = calculateAllMonthsFinancials(patients);
+  const totalIncome = allMonthsPaid > 0 ? allMonthsPaid : (finance?.totals?.totalIncome || 0);
 
-  const totalIncome = patientNetRevenueTotal;
-  const totalExpenses = finance?.totals?.totalExpenses || 0;
+  // إجمالي المصروفات والسلف = مجموع الفواتير + مجموع السلف + مجموع مصاريف النزلاء بكافة الشهور
+  const invoicesTotal = Number(finance?.totals?.invoicesTotal || 0);
+  const advancesTotal = Number(finance?.totals?.advancesTotal || 0);
+  const totalExpenses = (invoicesTotal > 0 || advancesTotal > 0 || allMonthsPatientExpenses > 0)
+    ? (invoicesTotal + advancesTotal + allMonthsPatientExpenses)
+    : (finance?.totals?.totalExpenses || 0);
+
   const netRevenue = totalIncome - totalExpenses;
-  const advancesTotal = finance?.totals?.advancesTotal || 0;
 
   const totals = {
     totalIncome,
@@ -75,7 +134,7 @@ export default function FinancePage() {
 
       {/* Financial Metrics Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        
+
         <div className="mono-card p-5">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-zinc-400">إجمالي الإيرادات</span>
@@ -130,27 +189,24 @@ export default function FinancePage() {
       <div className="border-b border-zinc-800 flex items-center gap-6">
         <button
           onClick={() => setActiveTab('INCOME')}
-          className={`pb-3 text-sm font-bold transition-all relative ${
-            activeTab === 'INCOME' ? 'text-white border-b-2 border-white' : 'text-zinc-400 hover:text-white'
-          }`}
+          className={`pb-3 text-sm font-bold transition-all relative ${activeTab === 'INCOME' ? 'text-white border-b-2 border-white' : 'text-zinc-400 hover:text-white'
+            }`}
         >
           الإيرادات ({incomeList.length})
         </button>
 
         <button
           onClick={() => setActiveTab('EXPENSES')}
-          className={`pb-3 text-sm font-bold transition-all relative ${
-            activeTab === 'EXPENSES' ? 'text-white border-b-2 border-white' : 'text-zinc-400 hover:text-white'
-          }`}
+          className={`pb-3 text-sm font-bold transition-all relative ${activeTab === 'EXPENSES' ? 'text-white border-b-2 border-white' : 'text-zinc-400 hover:text-white'
+            }`}
         >
           المصروفات ({expenseList.length})
         </button>
 
         <button
           onClick={() => setActiveTab('TRANSACTIONS')}
-          className={`pb-3 text-sm font-bold transition-all relative ${
-            activeTab === 'TRANSACTIONS' ? 'text-white border-b-2 border-white' : 'text-zinc-400 hover:text-white'
-          }`}
+          className={`pb-3 text-sm font-bold transition-all relative ${activeTab === 'TRANSACTIONS' ? 'text-white border-b-2 border-white' : 'text-zinc-400 hover:text-white'
+            }`}
         >
           الحركات المالية الشاملة ({transactions.length})
         </button>
@@ -257,9 +313,8 @@ export default function FinancePage() {
               transactions.map(tx => (
                 <div key={tx.id} className="p-4 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs ${
-                      tx.kind === 'إيراد' ? 'bg-white text-black' : 'bg-zinc-800 text-white'
-                    }`}>
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs ${tx.kind === 'إيراد' ? 'bg-white text-black' : 'bg-zinc-800 text-white'
+                      }`}>
                       {tx.kind === 'إيراد' ? <ArrowUpLeft className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4 text-zinc-400" />}
                     </div>
                     <div>
