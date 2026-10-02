@@ -122,7 +122,7 @@ export default function ReportsPage() {
 
       {/* 3 Summary Metrics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        
+
         <div className="mono-card p-6">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-zinc-400">إجمالي الإيرادات</span>
@@ -199,7 +199,7 @@ export default function ReportsPage() {
           </div>
 
           <div className="space-y-4 pt-2">
-            
+
             <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-between">
               <div>
                 <div className="font-bold text-white">النزلاء الحاليون</div>
