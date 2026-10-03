@@ -24,7 +24,7 @@ export const NAVIGATION_PERMISSIONS = {
   dashboard: ['super_admin', 'branch_manager', 'receptionist', 'accountant', 'doctor', 'nurse', 'supervisor'],
   branches: ['super_admin'],
   users: ['super_admin', 'branch_manager'],
-  patients: ['super_admin', 'branch_manager', 'receptionist', 'doctor', 'nurse'],
+  patients: ['super_admin', 'branch_manager', 'receptionist', 'accountant', 'doctor', 'nurse'],
   employees: ['super_admin', 'branch_manager'],
   attendance: ['super_admin', 'branch_manager', 'receptionist', 'supervisor'],
   advances: ['super_admin', 'branch_manager', 'accountant'],
