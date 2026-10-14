@@ -37,6 +37,7 @@ export default function GlobalModals() {
   const [patStayValue, setPatStayValue] = useState('');
   const [patFirstPayment, setPatFirstPayment] = useState('');
   const [patInitialExpenses, setPatInitialExpenses] = useState('');
+  const [patExpenseDeposit, setPatExpenseDeposit] = useState('');
   const [patNotes, setPatNotes] = useState('');
 
   // Auto calculated values for Add Patient
@@ -102,6 +103,7 @@ export default function GlobalModals() {
   const [renewMode, setRenewMode] = useState('add');
   const [renewFirstPayment, setRenewFirstPayment] = useState('');
   const [renewPaymentMethod, setRenewPaymentMethod] = useState('كاش');
+  const [renewInitialExpenses, setRenewInitialExpenses] = useState('');
   const [renewNotes, setRenewNotes] = useState('');
 
   // Reset/Prefill helper
@@ -112,31 +114,37 @@ export default function GlobalModals() {
       setPatStayValue('');
       setPatFirstPayment('');
       setPatInitialExpenses('');
+      setPatExpenseDeposit('');
       setPatNotes('');
     }
     if (activeModal === 'EDIT_PATIENT' && modalData) {
       setPatName(modalData.name || '');
+      const validEntry = modalData.entryDate && !isNaN(new Date(modalData.entryDate).getTime());
       setPatEntryDate(
-        modalData.entryDate
+        validEntry
           ? new Date(modalData.entryDate).toISOString().split('T')[0]
           : new Date().toISOString().split('T')[0]
       );
+      const rawExit = modalData.exitDate || modalData.expectedExitDate;
+      const validExit = rawExit && !isNaN(new Date(rawExit).getTime());
       setPatExpectedExit(
-        modalData.exitDate
-          ? new Date(modalData.exitDate).toISOString().split('T')[0]
-          : (modalData.expectedExitDate ? new Date(modalData.expectedExitDate).toISOString().split('T')[0] : '')
+        validExit
+          ? new Date(rawExit).toISOString().split('T')[0]
+          : ''
       );
       setPatStayValue(modalData.stayValue ?? modalData.accommodationAmount ?? '');
       setPatExpenseDeposit(modalData.expenseDeposit ?? modalData.expensesDeposit ?? '');
       setPatNotes(modalData.notes || '');
     }
     if (activeModal === 'RENEW_PATIENT' && modalData) {
-      setRenewEntryDate(new Date().toISOString().split('T')[0]);
+      const defaultRenewDate = modalData.defaultDate || (modalData.eventDate && !isNaN(new Date(modalData.eventDate).getTime()) ? new Date(modalData.eventDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
+      setRenewEntryDate(defaultRenewDate);
       setRenewExpectedExit('');
       setRenewStayValue('');
       setRenewMode('add');
       setRenewFirstPayment('');
       setRenewPaymentMethod('كاش');
+      setRenewInitialExpenses('');
       setRenewNotes('');
     }
     if (activeModal === 'ADD_EMPLOYEE') {
@@ -355,8 +363,9 @@ export default function GlobalModals() {
                   data: {
                     name: patName,
                     entryDate: patEntryDate,
-                    expectedExitDate: patExpectedExit,
-                    stayValue: patStayValue,
+                    expectedExitDate: patExpectedExit || null,
+                    stayValue: Number(patStayValue) || 0,
+                    accommodationAmount: Number(patStayValue) || 0,
                     expenseDeposit: Number(patExpenseDeposit) || 0,
                     notes: patNotes
                   }
@@ -448,11 +457,11 @@ export default function GlobalModals() {
 
         {/* 1.6. RENEW PATIENT MODAL */}
         {activeModal === 'RENEW_PATIENT' && (() => {
-          const prevStay = Number(modalData?.stayValue ?? modalData?.accommodationAmount ?? 0);
           const addStay = Number(renewStayValue) || 0;
-          const newTotalStay = renewMode === 'replace' ? addStay : (prevStay + addStay);
           const firstPay = Number(renewFirstPayment) || 0;
-          const remainingAfter = Math.max(0, newTotalStay - ((Number(modalData?.paidAmount ?? modalData?.paid ?? 0)) + firstPay));
+          const expVal = Number(renewInitialExpenses) || 0;
+          const remainingAfter = Math.max(0, addStay - firstPay);
+          const expectedNet = firstPay - expVal;
 
           return (
             <form
@@ -466,9 +475,11 @@ export default function GlobalModals() {
                       renewDate: renewEntryDate,
                       expectedExitDate: renewExpectedExit || null,
                       accommodationAmount: addStay,
-                      mode: renewMode,
+                      stayValue: addStay,
+                      mode: 'add',
                       firstPayment: firstPay,
                       paymentMethod: renewPaymentMethod,
+                      initialExpenses: expVal,
                       notes: renewNotes
                     }
                   },
@@ -500,7 +511,7 @@ export default function GlobalModals() {
               {/* Dates */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-zinc-300 mb-1.5">تاريخ التجديد / بدء المدة *</label>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1.5">تاريخ التجديد / بدء المدة الجديدة *</label>
                   <input
                     type="date"
                     required
@@ -520,34 +531,11 @@ export default function GlobalModals() {
                 </div>
               </div>
 
-              {/* Stay Value & Mode */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs font-semibold text-zinc-300">
-                    قيمة التجديد / الإقامة المضافة (جنيه) *
-                  </label>
-                  <div className="flex items-center gap-1 bg-zinc-950 p-1 border border-zinc-800 rounded-lg">
-                    <button
-                      type="button"
-                      onClick={() => setRenewMode('add')}
-                      className={`px-2 py-0.5 text-[11px] rounded transition-all font-medium ${
-                        renewMode === 'add' ? 'bg-zinc-800 text-white font-bold' : 'text-zinc-400 hover:text-white'
-                      }`}
-                    >
-                      إضافة للمبلغ السابق
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setRenewMode('replace')}
-                      className={`px-2 py-0.5 text-[11px] rounded transition-all font-medium ${
-                        renewMode === 'replace' ? 'bg-zinc-800 text-white font-bold' : 'text-zinc-400 hover:text-white'
-                      }`}
-                    >
-                      مبلغ كلي جديد
-                    </button>
-                  </div>
-                </div>
-
+              {/* Stay Value (Cost of the accommodation for this renewal) */}
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                  قيمة إقامة التجديد (جنيه) *
+                </label>
                 <input
                   type="number"
                   required
@@ -562,7 +550,7 @@ export default function GlobalModals() {
               {/* First Payment & Method */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-zinc-300 mb-1.5">الدفعة المسددة الآن (اختياري)</label>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1.5">المدفوع من قيمة الإقامة الآن (اختياري)</label>
                   <input
                     type="number"
                     min="0"
@@ -588,26 +576,48 @@ export default function GlobalModals() {
                 </div>
               </div>
 
+              {/* Initial Expenses for Renewal */}
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                  مصاريف النزيل للتجديد (جنيه)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={renewInitialExpenses}
+                  onChange={(e) => setRenewInitialExpenses(e.target.value)}
+                  placeholder="مثال: 500 أو 1000"
+                  className="mono-input text-sm dir-ltr font-mono"
+                />
+                <p className="text-[11px] text-zinc-500 mt-1">
+                  المصاريف الشخصية/العلاجية المقررة مع هذا التجديد — تُخصم لحساب صافي إيراد التجديد
+                </p>
+              </div>
+
               {/* Live Financial Calculation Box */}
-              <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-xl space-y-1.5 text-xs">
+              <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-xl space-y-2 text-xs">
                 <div className="flex items-center justify-between text-zinc-400">
-                  <span>إجمالي قيمة الإقامة السابقة:</span>
-                  <span className="font-mono text-zinc-300">{formatCurrency(prevStay)}</span>
-                </div>
-                {addStay > 0 && (
-                  <div className="flex items-center justify-between text-zinc-400">
-                    <span>{renewMode === 'add' ? '+ قيمة التجديد المضافة:' : 'القيمة الجديدة المستبدلة:'}</span>
-                    <span className="font-mono font-semibold text-emerald-400">+{formatCurrency(addStay)}</span>
-                  </div>
-                )}
-                <div className="pt-1.5 border-t border-zinc-850 flex items-center justify-between font-bold text-white">
-                  <span>إجمالي الإقامة بعد التجديد:</span>
-                  <span className="font-mono text-sm text-white">{formatCurrency(newTotalStay)}</span>
+                  <span>قيمة إقامة التجديد:</span>
+                  <span className="font-mono text-zinc-200 font-bold">{formatCurrency(addStay)}</span>
                 </div>
                 {firstPay > 0 && (
-                  <div className="flex items-center justify-between text-zinc-400 pt-1">
-                    <span>دفعة مسددة فورية:</span>
+                  <div className="flex items-center justify-between text-zinc-400">
+                    <span>المدفوع الآن:</span>
                     <span className="font-mono font-semibold text-emerald-400">-{formatCurrency(firstPay)}</span>
+                  </div>
+                )}
+                <div className="pt-1.5 border-t border-zinc-800 flex items-center justify-between font-bold text-white">
+                  <span>المتبقي من إقامة التجديد:</span>
+                  <span className={`font-mono text-sm ${remainingAfter > 0 ? 'text-amber-400' : 'text-zinc-400'}`}>
+                    {formatCurrency(remainingAfter)}
+                  </span>
+                </div>
+                {(firstPay > 0 || expVal > 0) && (
+                  <div className="pt-1.5 border-t border-zinc-800 flex items-center justify-between font-medium">
+                    <span className="text-zinc-400">صافي الإيراد المتوقع (المدفوع − المصاريف):</span>
+                    <span className={`font-mono font-bold ${expectedNet >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {formatCurrency(expectedNet)}
+                    </span>
                   </div>
                 )}
               </div>
@@ -619,7 +629,7 @@ export default function GlobalModals() {
                   rows="2"
                   value={renewNotes}
                   onChange={(e) => setRenewNotes(e.target.value)}
-                  placeholder="مثال: تجديد حجز لشهر إضافي - اتفاق مع ولي الأمر..."
+                  placeholder="مثال: تجديد حجز لشهر إضافي - أي تفاصيل أو اتفاقيات..."
                   className="mono-input text-xs"
                 />
               </div>

@@ -109,9 +109,46 @@ export default function PatientsPage() {
     let recordCount = 0;
 
     rawPatients.forEach(patient => {
+      // Find entry event in timeline
+      const entryEvent = Array.isArray(patient.timeline) ? patient.timeline.find(e => e.type === 'entry') : null;
+      const renewalEvents = Array.isArray(patient.timeline) ? patient.timeline.filter(e => e.type === 'renewal') : [];
+      const sumRenewals = renewalEvents.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+      
+      let entryStay = 0;
+      if (entryEvent && entryEvent.amount) {
+        entryStay = Number(entryEvent.amount);
+      } else if (sumRenewals > 0) {
+        entryStay = Math.max(0, (Number(patient.accommodationAmount ?? patient.stayValue ?? 0)) - sumRenewals);
+      } else {
+        entryStay = Number(patient.accommodationAmount ?? patient.stayValue ?? 0);
+      }
+
+      // Helper to compute month-specific finances
+      const calcMonthFinances = (mKey, stayVal, fallbackPay, fallbackExp) => {
+        const mPayments = Array.isArray(patient.payments)
+          ? patient.payments.filter(p => formatDateToKey(p.date) === mKey)
+          : [];
+        const paid = mPayments.length > 0
+          ? mPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0)
+          : (fallbackPay !== undefined && fallbackPay !== null ? Number(fallbackPay) : (renewalEvents.length > 0 ? 0 : Number(patient.paidAmount ?? patient.paid ?? 0)));
+
+        const mExpenses = Array.isArray(patient.expenses)
+          ? patient.expenses.filter(e => formatDateToKey(e.date) === mKey)
+          : [];
+        const expenses = mExpenses.length > 0
+          ? mExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0)
+          : (fallbackExp !== undefined && fallbackExp !== null ? Number(fallbackExp) : (renewalEvents.length > 0 ? 0 : Number(patient.totalExpenses ?? patient.expensesTotal ?? 0)));
+
+        const remaining = Math.max(0, stayVal - paid);
+        const net = paid - expenses;
+        return { paid, expenses, remaining, net };
+      };
+
       // 1. Entry Month
       const entryKey = formatDateToKey(patient.entryDate || patient.createdAt) || currentMonthKey;
       if (!groups[entryKey]) groups[entryKey] = [];
+
+      const entryFin = calcMonthFinances(entryKey, entryStay, entryEvent?.firstPayment, entryEvent?.initialExpenses);
 
       // Check if entry belongs to this month
       groups[entryKey].push({
@@ -119,6 +156,12 @@ export default function PatientsPage() {
         patient,
         eventType: 'entry',
         eventDate: patient.entryDate || patient.createdAt,
+        monthKey: entryKey,
+        monthStayValue: entryStay,
+        monthPaid: entryFin.paid,
+        monthExpenses: entryFin.expenses,
+        monthRemaining: entryFin.remaining,
+        monthNet: entryFin.net,
         isEntry: true,
         isRenewal: false
       });
@@ -128,29 +171,35 @@ export default function PatientsPage() {
       const seenRenewalMonths = new Set();
 
       if (Array.isArray(patient.timeline)) {
-        patient.timeline
-          .filter(e => e.type === 'renewal')
-          .forEach((renEvent, idx) => {
-            const renKey = formatDateToKey(renEvent.date);
-            if (renKey) {
-              if (!groups[renKey]) groups[renKey] = [];
-              // Prevent duplicating in same month
-              if (!seenRenewalMonths.has(renKey)) {
-                seenRenewalMonths.add(renKey);
-                groups[renKey].push({
-                  id: `${patient.id}-renewal-${renKey}-${idx}`,
-                  patient,
-                  eventType: 'renewal',
-                  eventDate: renEvent.date,
-                  renewalAmount: renEvent.amount,
-                  isEntry: false,
-                  isRenewal: true,
-                  renewalIndex: idx + 1
-                });
-                recordCount++;
-              }
+        renewalEvents.forEach((renEvent, idx) => {
+          const renKey = formatDateToKey(renEvent.date);
+          if (renKey) {
+            if (!groups[renKey]) groups[renKey] = [];
+            if (!seenRenewalMonths.has(renKey)) {
+              seenRenewalMonths.add(renKey);
+              const renStay = Number(renEvent.amount || 0);
+              const renFin = calcMonthFinances(renKey, renStay, renEvent.firstPayment, renEvent.initialExpenses);
+
+              groups[renKey].push({
+                id: `${patient.id}-renewal-${renKey}-${idx}`,
+                patient,
+                eventType: 'renewal',
+                eventDate: renEvent.date,
+                monthKey: renKey,
+                monthStayValue: renStay,
+                monthPaid: renFin.paid,
+                monthExpenses: renFin.expenses,
+                monthRemaining: renFin.remaining,
+                monthNet: renFin.net,
+                renewalAmount: renStay,
+                isEntry: false,
+                isRenewal: true,
+                renewalIndex: idx + 1
+              });
+              recordCount++;
             }
-          });
+          }
+        });
       }
 
       // Fallback: if lastRenewalDate exists and was not caught in timeline
@@ -158,11 +207,20 @@ export default function PatientsPage() {
       if (lastRenKey && !seenRenewalMonths.has(lastRenKey)) {
         if (!groups[lastRenKey]) groups[lastRenKey] = [];
         seenRenewalMonths.add(lastRenKey);
+        const fallbackStay = Math.max(0, (Number(patient.accommodationAmount ?? patient.stayValue ?? 0)) - entryStay);
+        const renFin = calcMonthFinances(lastRenKey, fallbackStay, undefined, undefined);
+
         groups[lastRenKey].push({
           id: `${patient.id}-lastrenewal-${lastRenKey}`,
           patient,
           eventType: 'renewal',
           eventDate: patient.lastRenewalDate || patient.renewalDate,
+          monthKey: lastRenKey,
+          monthStayValue: fallbackStay,
+          monthPaid: renFin.paid,
+          monthExpenses: renFin.expenses,
+          monthRemaining: renFin.remaining,
+          monthNet: renFin.net,
           isEntry: false,
           isRenewal: true,
           renewalIndex: patient.renewalsCount || 1
@@ -280,13 +338,29 @@ export default function PatientsPage() {
   const getStatusBadge = (status) => {
     switch (status) {
       case 'حالي':
-        return <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-white text-black">حالي</span>;
+        return (
+          <span className="px-2 py-0.5 text-[11px] font-bold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            حالي
+          </span>
+        );
       case 'جديد':
-        return <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-zinc-700 text-zinc-100 border border-zinc-500">جديد</span>;
+        return (
+          <span className="px-2 py-0.5 text-[11px] font-bold rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
+            جديد
+          </span>
+        );
       case 'خرج':
-        return <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-zinc-900 text-zinc-400 border border-zinc-800">خرج</span>;
+        return (
+          <span className="px-2 py-0.5 text-[11px] font-bold rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700">
+            خرج
+          </span>
+        );
       default:
-        return <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-zinc-800 text-zinc-300">{status}</span>;
+        return (
+          <span className="px-2 py-0.5 text-[11px] font-bold rounded-full bg-zinc-800 text-zinc-400">
+            {status}
+          </span>
+        );
     }
   };
 
@@ -421,16 +495,11 @@ export default function PatientsPage() {
             // Month level stats
             const entriesCount = items.filter(i => i.isEntry).length;
             const renewalsCount = items.filter(i => i.isRenewal).length;
-            const totalMonthStay = items.reduce((sum, item) => sum + (Number(item.patient.stayValue ?? item.patient.accommodationAmount) || 0), 0);
-            const totalMonthPaid = items.reduce((sum, item) => sum + (Number(item.patient.paidAmount ?? item.patient.paid) || 0), 0);
-            const totalMonthRemaining = items.reduce((sum, item) => sum + (Number(item.patient.remainingAmount ?? item.patient.remaining) || 0), 0);
-            const totalMonthExpenses = items.reduce((sum, item) => sum + (Number(item.patient.totalExpenses ?? item.patient.expensesTotal) || 0), 0);
-            const totalMonthNet = items.reduce((sum, item) => {
-              const p = item.patient;
-              const paid = Number(p.paidAmount ?? p.paid ?? 0);
-              const exp = Number(p.totalExpenses ?? p.expensesTotal ?? 0);
-              return sum + (paid - exp);
-            }, 0);
+            const totalMonthStay = items.reduce((sum, item) => sum + (Number(item.monthStayValue) || 0), 0);
+            const totalMonthPaid = items.reduce((sum, item) => sum + (Number(item.monthPaid) || 0), 0);
+            const totalMonthRemaining = items.reduce((sum, item) => sum + (Number(item.monthRemaining) || 0), 0);
+            const totalMonthExpenses = items.reduce((sum, item) => sum + (Number(item.monthExpenses) || 0), 0);
+            const totalMonthNet = totalMonthPaid - totalMonthExpenses;
 
             return (
               <div 
@@ -536,24 +605,23 @@ export default function PatientsPage() {
                         </button>
                       </div>
                     ) : (
-                      <div className="overflow-x-auto max-w-full">
-                        <table className="w-full text-right border-collapse min-w-[980px]">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-right text-xs">
                           <thead>
-                            <tr className="bg-zinc-900/40">
-                              <th className="mono-table-th">النزيل</th>
+                            <tr className="border-b border-zinc-800 bg-zinc-950">
+                              <th className="mono-table-th">اسم النزيل</th>
                               <th className="mono-table-th">حالة الشهر</th>
                               <th className="mono-table-th">تاريخ الدخول</th>
                               <th className="mono-table-th">تاريخ التجديد</th>
-                              <th className="mono-table-th">تاريخ الخروج</th>
                               <th className="mono-table-th">قيمة الإقامة</th>
-                              <th className="mono-table-th">المدفوع</th>
+                              <th className="mono-table-th">المسدد</th>
                               <th className="mono-table-th">المتبقي</th>
                               <th className="mono-table-th">صافي الإيرادات</th>
-                              <th className="mono-table-th">حالة الإقامة</th>
+                              <th className="mono-table-th">الحالة</th>
                               <th className="mono-table-th text-center">الإجراءات</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-zinc-800/60">
+                          <tbody className="divide-y divide-zinc-800">
                             {items.map((item) => {
                               const { patient, isRenewal, isEntry, renewalIndex } = item;
                               let renewalDate = patient.lastRenewalDate || patient.renewalDate;
@@ -566,31 +634,24 @@ export default function PatientsPage() {
                               return (
                                 <tr key={item.id} className="hover:bg-zinc-900/60 transition-colors">
                                   {/* Name */}
-                                  <td className="mono-table-td font-semibold text-white">
-                                    <div className="flex items-center gap-2.5">
-                                      <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-300 shrink-0">
-                                        <User className="w-4 h-4" />
+                                  <td className="mono-table-td font-bold text-white">
+                                    <div>{patient.name}</div>
+                                    {patient.notes && (
+                                      <div className="text-[10px] text-zinc-500 font-normal truncate max-w-[150px]" title={patient.notes}>
+                                        {patient.notes}
                                       </div>
-                                      <div>
-                                        <div className="font-bold text-white text-sm">{patient.name}</div>
-                                        {patient.notes && (
-                                          <div className="text-[10px] text-zinc-500 truncate max-w-[180px]" title={patient.notes}>
-                                            {patient.notes}
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
+                                    )}
                                   </td>
 
                                   {/* Month Activity Tag */}
                                   <td className="mono-table-td">
                                     {isRenewal ? (
-                                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
                                         <RotateCcw className="w-3 h-3 text-cyan-400" />
-                                        <span>تجديد إقامة {renewalIndex ? `#${renewalIndex}` : ''}</span>
+                                        <span>تجديد {renewalIndex ? `#${renewalIndex}` : ''}</span>
                                       </span>
                                     ) : (
-                                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
                                         <Sparkles className="w-3 h-3 text-emerald-400" />
                                         <span>دخول جديد</span>
                                       </span>
@@ -598,11 +659,20 @@ export default function PatientsPage() {
                                   </td>
 
                                   {/* Entry Date */}
-                                  <td className="mono-table-td text-zinc-300">{formatDate(patient.entryDate)}</td>
+                                  <td className="mono-table-td text-zinc-400">{formatDate(patient.entryDate)}</td>
 
                                   {/* Renewal Date */}
                                   <td className="mono-table-td">
-                                    {renewalDate ? (
+                                    {isRenewal ? (
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-cyan-400 font-semibold">{formatDate(item.eventDate)}</span>
+                                        {renewalIndex && (
+                                          <span className="text-[10px] px-1.5 py-0.5 bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 rounded font-mono font-bold">
+                                            #{renewalIndex}
+                                          </span>
+                                        )}
+                                      </div>
+                                    ) : renewalDate ? (
                                       <div className="flex items-center gap-1.5">
                                         <span className="text-emerald-400 font-semibold">{formatDate(renewalDate)}</span>
                                         {renewalsCount > 1 && (
@@ -616,43 +686,25 @@ export default function PatientsPage() {
                                     )}
                                   </td>
 
-                                  {/* Exit Date */}
-                                  <td className="mono-table-td text-zinc-400">
-                                    {patient.exitDate ? formatDate(patient.exitDate) : (patient.expectedExitDate ? `متوقع: ${formatDate(patient.expectedExitDate)}` : '-')}
-                                  </td>
-
                                   {/* Stay Value */}
-                                  <td className="mono-table-td font-bold text-white">{formatCurrency(patient.stayValue)}</td>
+                                  <td className="mono-table-td font-semibold text-white">{formatCurrency(item.monthStayValue)}</td>
 
                                   {/* Paid */}
-                                  <td className="mono-table-td text-zinc-200">{formatCurrency(patient.paid)}</td>
+                                  <td className="mono-table-td text-emerald-400 font-semibold">{formatCurrency(item.monthPaid)}</td>
 
                                   {/* Remaining */}
-                                  <td className={`mono-table-td font-bold ${patient.remaining > 0 ? 'text-white' : 'text-zinc-500'}`}>
-                                    {formatCurrency(patient.remaining)}
-                                  </td>
+                                  <td className="mono-table-td text-rose-400 font-semibold">{formatCurrency(item.monthRemaining)}</td>
 
                                   {/* Net Revenue */}
                                   <td className="mono-table-td">
-                                    <div className="space-y-0.5">
-                                      {(() => {
-                                        const paid     = Number(patient.paidAmount   ?? patient.paid          ?? 0);
-                                        const expenses = Number(patient.totalExpenses ?? patient.expensesTotal ?? 0);
-                                        const net      = paid - expenses;
-                                        return (
-                                          <>
-                                            <div className={`font-bold font-mono text-sm ${net >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                              {formatCurrency(net)}
-                                            </div>
-                                            {expenses > 0 && (
-                                              <div className="text-[10px] text-zinc-500">
-                                                مصاريف: {formatCurrency(expenses)}
-                                              </div>
-                                            )}
-                                          </>
-                                        );
-                                      })()}
+                                    <div className={`font-bold font-mono ${item.monthNet >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                      {formatCurrency(item.monthNet)}
                                     </div>
+                                    {item.monthExpenses > 0 && (
+                                      <div className="text-[10px] text-zinc-500 font-normal">
+                                        مصاريف: {formatCurrency(item.monthExpenses)}
+                                      </div>
+                                    )}
                                   </td>
 
                                   {/* Status */}
@@ -677,28 +729,24 @@ export default function PatientsPage() {
                             })}
                           </tbody>
 
-                          {/* Table Footer with exact column totals */}
-                          <tfoot className="border-t-2 border-zinc-700 bg-zinc-900/80 font-bold">
+                          {/* Table Footer matching admin dashboard */}
+                          <tfoot className="border-t-2 border-zinc-700 bg-zinc-950 font-bold">
                             <tr>
-                              <td className="mono-table-td text-white" colSpan={5}>
+                              <td className="mono-table-td text-white" colSpan={4}>
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs uppercase tracking-wider text-zinc-300">إجمالي شهر {titleAr}:</span>
                                   <span className="text-xs text-zinc-400 font-mono">({items.length} نزيل)</span>
                                 </div>
                               </td>
-                              {/* Stay Value Total */}
                               <td className="mono-table-td text-white font-mono text-sm">
                                 {formatCurrency(totalMonthStay)}
                               </td>
-                              {/* Paid Total */}
-                              <td className="mono-table-td text-zinc-200 font-mono text-sm">
+                              <td className="mono-table-td text-emerald-400 font-mono text-sm">
                                 {formatCurrency(totalMonthPaid)}
                               </td>
-                              {/* Remaining Total */}
-                              <td className={`mono-table-td font-mono text-sm ${totalMonthRemaining > 0 ? 'text-amber-400' : 'text-zinc-500'}`}>
+                              <td className="mono-table-td text-rose-400 font-mono text-sm">
                                 {formatCurrency(totalMonthRemaining)}
                               </td>
-                              {/* Net Revenue Total */}
                               <td className="mono-table-td">
                                 <div className={`font-mono text-sm ${totalMonthNet >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                   {formatCurrency(totalMonthNet)}
@@ -709,7 +757,6 @@ export default function PatientsPage() {
                                   </div>
                                 )}
                               </td>
-                              {/* Status & Actions fillers */}
                               <td className="mono-table-td text-zinc-600 text-xs text-center">-</td>
                               <td className="mono-table-td text-zinc-600 text-xs text-center">-</td>
                             </tr>
@@ -749,10 +796,13 @@ export default function PatientsPage() {
             </Link>
             <button
               onClick={() => {
+                const target = activePatient;
                 setOpenActionId(null);
                 setActivePatient(null);
                 setMenuPosition(null);
-                openModal('ADD_PAYMENT', { ...activePatient, patientId: activePatient.id, patientName: activePatient.name });
+                if (target) {
+                  openModal('ADD_PAYMENT', { ...target, patientId: target.id, patientName: target.name });
+                }
               }}
               className="w-full text-right px-3 py-2 text-xs text-emerald-400 hover:bg-emerald-500/10 flex items-center gap-2 transition-colors font-medium"
             >
@@ -761,10 +811,13 @@ export default function PatientsPage() {
             </button>
             <button
               onClick={() => {
+                const target = activePatient;
                 setOpenActionId(null);
                 setActivePatient(null);
                 setMenuPosition(null);
-                openModal('ADD_PATIENT_EXPENSE', { ...activePatient, patientId: activePatient.id, patientName: activePatient.name });
+                if (target) {
+                  openModal('ADD_PATIENT_EXPENSE', { ...target, patientId: target.id, patientName: target.name });
+                }
               }}
               className="w-full text-right px-3 py-2 text-xs text-amber-400 hover:bg-amber-500/10 flex items-center gap-2 transition-colors font-medium"
             >
@@ -776,10 +829,13 @@ export default function PatientsPage() {
           <div className="py-1">
             <button
               onClick={() => {
+                const target = activePatient;
                 setOpenActionId(null);
                 setActivePatient(null);
                 setMenuPosition(null);
-                openModal('RENEW_PATIENT', activePatient);
+                if (target) {
+                  openModal('RENEW_PATIENT', target);
+                }
               }}
               className="w-full text-right px-3 py-2 text-xs text-emerald-400 hover:bg-emerald-500/10 flex items-center gap-2 transition-colors font-medium"
             >
@@ -790,10 +846,13 @@ export default function PatientsPage() {
             {activePatient.status !== 'خرج' && activePatient.status !== 'discharged' && (
               <button
                 onClick={() => {
+                  const target = activePatient;
                   setOpenActionId(null);
                   setActivePatient(null);
                   setMenuPosition(null);
-                  openModal('DISCHARGE_PATIENT', activePatient);
+                  if (target) {
+                    openModal('DISCHARGE_PATIENT', target);
+                  }
                 }}
                 className="w-full text-right px-3 py-2 text-xs text-rose-300 hover:bg-rose-500/10 hover:text-rose-200 flex items-center gap-2 transition-colors font-medium"
               >
@@ -804,10 +863,13 @@ export default function PatientsPage() {
 
             <button
               onClick={() => {
+                const target = activePatient;
                 setOpenActionId(null);
                 setActivePatient(null);
                 setMenuPosition(null);
-                openModal('EDIT_PATIENT', activePatient);
+                if (target) {
+                  openModal('EDIT_PATIENT', target);
+                }
               }}
               className="w-full text-right px-3 py-2 text-xs text-blue-400 hover:bg-blue-500/10 flex items-center gap-2 transition-colors font-medium"
             >

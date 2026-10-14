@@ -1,3 +1,14 @@
 {
+  "/_not-found/page": "app/_not-found/page.js",
+  "/login/page": "app/login/page.js",
+  "/page": "app/page.js",
+  "/dashboard/advances/page": "app/dashboard/advances/page.js",
+  "/dashboard/finance/page": "app/dashboard/finance/page.js",
+  "/dashboard/employees/page": "app/dashboard/employees/page.js",
+  "/dashboard/invoices/page": "app/dashboard/invoices/page.js",
+  "/dashboard/attendance/page": "app/dashboard/attendance/page.js",
+  "/dashboard/patients/[id]/page": "app/dashboard/patients/[id]/page.js",
+  "/dashboard/page": "app/dashboard/page.js",
+  "/dashboard/patients/page": "app/dashboard/patients/page.js",
   "/dashboard/reports/page": "app/dashboard/reports/page.js"
 }
