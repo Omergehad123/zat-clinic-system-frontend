@@ -6,6 +6,7 @@ import { useAdvances } from '../../hooks/useAdvances';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useUIStore } from '../../store/useUIStore';
 import { formatCurrency, formatNumber } from '../../utils/formatters';
+import { buildPatientMonthlyGroups } from '../../utils/patientMonthlyCalculator';
 import { 
   Users, 
   UserPlus, 
@@ -65,14 +66,11 @@ export default function DashboardOverviewPage() {
   ).length || 0;
 
   const totalPatientPaid = patients?.reduce((acc, p) => acc + Number(p.paidAmount ?? p.paid ?? 0), 0) || 0;
-  const totalPatientNetRevenue = patients?.reduce((acc, p) => {
-    const paid     = Number(p.paidAmount   ?? p.paid          ?? 0);
-    const expenses = Number(p.totalExpenses ?? p.expensesTotal ?? 0);
-    return acc + (paid - expenses);
-  }, 0) || 0;
+  const patientMonthlyData = buildPatientMonthlyGroups(patients);
+  const totalPatientStay = patientMonthlyData.totals.totalStayValue;
   const totalRevenue = (finance?.totals?.totalIncome !== undefined && finance?.totals?.totalIncome !== null)
     ? finance.totals.totalIncome
-    : (totalPatientNetRevenue || finance?.totals?.totalRevenue || totalPatientPaid);
+    : (totalPatientStay || totalPatientPaid);
   const totalExpenses = finance?.totals?.totalExpenses || 0;
   const netRevenue = finance?.totals?.netRevenue || (totalRevenue - totalExpenses);
   const totalAdvances = finance?.totals?.advancesTotal || advancesData?.totals?.month || 0;

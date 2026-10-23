@@ -1,4 +1,5 @@
 import { apiFetch } from './api';
+import { buildPatientMonthlyGroups } from '../utils/patientMonthlyCalculator';
 
 export const financeService = {
   getFinanceData: async (branchId = 'all', filters = {}) => {
@@ -43,52 +44,9 @@ export const financeService = {
     });
 
     if (patients.length > 0) {
-      const now = new Date();
-      const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      const groups = {};
-
-      const formatDateToKey = (dateInput) => {
-        if (!dateInput) return null;
-        const d = new Date(dateInput);
-        if (isNaN(d.getTime())) return null;
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        return `${y}-${m}`;
-      };
-
-      patients.forEach(patient => {
-        const entryKey = formatDateToKey(patient.entryDate || patient.createdAt) || currentMonthKey;
-        if (!groups[entryKey]) groups[entryKey] = [];
-        groups[entryKey].push(patient);
-
-        const seenRenewalMonths = new Set();
-        if (Array.isArray(patient.timeline)) {
-          patient.timeline
-            .filter(e => e.type === 'renewal')
-            .forEach((renEvent) => {
-              const renKey = formatDateToKey(renEvent.date);
-              if (renKey && !seenRenewalMonths.has(renKey)) {
-                seenRenewalMonths.add(renKey);
-                if (!groups[renKey]) groups[renKey] = [];
-                groups[renKey].push(patient);
-              }
-            });
-        }
-
-        const lastRenKey = formatDateToKey(patient.lastRenewalDate || patient.renewalDate);
-        if (lastRenKey && !seenRenewalMonths.has(lastRenKey)) {
-          seenRenewalMonths.add(lastRenKey);
-          if (!groups[lastRenKey]) groups[lastRenKey] = [];
-          groups[lastRenKey].push(patient);
-        }
-      });
-
-      Object.values(groups).forEach(items => {
-        items.forEach(p => {
-          calculatedTotalIncome += Number(p.paidAmount ?? p.paid ?? 0);
-          calculatedTotalPatientExpenses += Number(p.totalExpenses ?? p.expensesTotal ?? 0);
-        });
-      });
+      const monthlyGroupsData = buildPatientMonthlyGroups(patients);
+      calculatedTotalIncome = monthlyGroupsData.totals.totalStayValue;
+      calculatedTotalPatientExpenses = monthlyGroupsData.totals.totalExpenses;
     } else {
       calculatedTotalIncome = summary.totalIncome || 0;
     }

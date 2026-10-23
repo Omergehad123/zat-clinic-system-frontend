@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { usePatients } from '../../../hooks/usePatients';
 import { useUIStore } from '../../../store/useUIStore';
 import { formatCurrency, formatDate } from '../../../utils/formatters';
+import { buildPatientMonthlyGroups } from '../../../utils/patientMonthlyCalculator';
 import { 
   Search, 
   Filter, 
@@ -91,158 +92,8 @@ export default function PatientsPage() {
   // 1. Their entryDate month (tagged as 'entry' / جديد)
   // 2. Any renewalDate months from timeline or lastRenewalDate (tagged as 'renewal' / تجديد)
   const { monthlyGroups, monthKeys, totalRecordsCount } = useMemo(() => {
-    const groups = {};
-
-    // Ensure current month is always present in groups
-    if (!groups[currentMonthKey]) {
-      groups[currentMonthKey] = [];
-    }
-
-    if (!rawPatients || !Array.isArray(rawPatients)) {
-      return { 
-        monthlyGroups: groups, 
-        monthKeys: [currentMonthKey], 
-        totalRecordsCount: 0 
-      };
-    }
-
-    let recordCount = 0;
-
-    rawPatients.forEach(patient => {
-      // Find entry event in timeline
-      const entryEvent = Array.isArray(patient.timeline) ? patient.timeline.find(e => e.type === 'entry') : null;
-      const renewalEvents = Array.isArray(patient.timeline) ? patient.timeline.filter(e => e.type === 'renewal') : [];
-      const sumRenewals = renewalEvents.reduce((s, r) => s + (Number(r.amount) || 0), 0);
-      
-      let entryStay = 0;
-      if (entryEvent && entryEvent.amount) {
-        entryStay = Number(entryEvent.amount);
-      } else if (sumRenewals > 0) {
-        entryStay = Math.max(0, (Number(patient.accommodationAmount ?? patient.stayValue ?? 0)) - sumRenewals);
-      } else {
-        entryStay = Number(patient.accommodationAmount ?? patient.stayValue ?? 0);
-      }
-
-      // Helper to compute month-specific finances
-      const calcMonthFinances = (mKey, stayVal, fallbackPay, fallbackExp) => {
-        const mPayments = Array.isArray(patient.payments)
-          ? patient.payments.filter(p => formatDateToKey(p.date) === mKey)
-          : [];
-        const paid = mPayments.length > 0
-          ? mPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0)
-          : (fallbackPay !== undefined && fallbackPay !== null ? Number(fallbackPay) : (renewalEvents.length > 0 ? 0 : Number(patient.paidAmount ?? patient.paid ?? 0)));
-
-        const mExpenses = Array.isArray(patient.expenses)
-          ? patient.expenses.filter(e => formatDateToKey(e.date) === mKey)
-          : [];
-        const expenses = mExpenses.length > 0
-          ? mExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0)
-          : (fallbackExp !== undefined && fallbackExp !== null ? Number(fallbackExp) : (renewalEvents.length > 0 ? 0 : Number(patient.totalExpenses ?? patient.expensesTotal ?? 0)));
-
-        const remaining = Math.max(0, stayVal - paid);
-        const net = paid - expenses;
-        return { paid, expenses, remaining, net };
-      };
-
-      // 1. Entry Month
-      const entryKey = formatDateToKey(patient.entryDate || patient.createdAt) || currentMonthKey;
-      if (!groups[entryKey]) groups[entryKey] = [];
-
-      const entryFin = calcMonthFinances(entryKey, entryStay, entryEvent?.firstPayment, entryEvent?.initialExpenses);
-
-      // Check if entry belongs to this month
-      groups[entryKey].push({
-        id: `${patient.id}-entry-${entryKey}`,
-        patient,
-        eventType: 'entry',
-        eventDate: patient.entryDate || patient.createdAt,
-        monthKey: entryKey,
-        monthStayValue: entryStay,
-        monthPaid: entryFin.paid,
-        monthExpenses: entryFin.expenses,
-        monthRemaining: entryFin.remaining,
-        monthNet: entryFin.net,
-        isEntry: true,
-        isRenewal: false
-      });
-      recordCount++;
-
-      // 2. Renewal Months from timeline
-      const seenRenewalMonths = new Set();
-
-      if (Array.isArray(patient.timeline)) {
-        renewalEvents.forEach((renEvent, idx) => {
-          const renKey = formatDateToKey(renEvent.date);
-          if (renKey) {
-            if (!groups[renKey]) groups[renKey] = [];
-            if (!seenRenewalMonths.has(renKey)) {
-              seenRenewalMonths.add(renKey);
-              const renStay = Number(renEvent.amount || 0);
-              const renFin = calcMonthFinances(renKey, renStay, renEvent.firstPayment, renEvent.initialExpenses);
-
-              groups[renKey].push({
-                id: `${patient.id}-renewal-${renKey}-${idx}`,
-                patient,
-                eventType: 'renewal',
-                eventDate: renEvent.date,
-                monthKey: renKey,
-                monthStayValue: renStay,
-                monthPaid: renFin.paid,
-                monthExpenses: renFin.expenses,
-                monthRemaining: renFin.remaining,
-                monthNet: renFin.net,
-                renewalAmount: renStay,
-                isEntry: false,
-                isRenewal: true,
-                renewalIndex: idx + 1
-              });
-              recordCount++;
-            }
-          }
-        });
-      }
-
-      // Fallback: if lastRenewalDate exists and was not caught in timeline
-      const lastRenKey = formatDateToKey(patient.lastRenewalDate || patient.renewalDate);
-      if (lastRenKey && !seenRenewalMonths.has(lastRenKey)) {
-        if (!groups[lastRenKey]) groups[lastRenKey] = [];
-        seenRenewalMonths.add(lastRenKey);
-        const fallbackStay = Math.max(0, (Number(patient.accommodationAmount ?? patient.stayValue ?? 0)) - entryStay);
-        const renFin = calcMonthFinances(lastRenKey, fallbackStay, undefined, undefined);
-
-        groups[lastRenKey].push({
-          id: `${patient.id}-lastrenewal-${lastRenKey}`,
-          patient,
-          eventType: 'renewal',
-          eventDate: patient.lastRenewalDate || patient.renewalDate,
-          monthKey: lastRenKey,
-          monthStayValue: fallbackStay,
-          monthPaid: renFin.paid,
-          monthExpenses: renFin.expenses,
-          monthRemaining: renFin.remaining,
-          monthNet: renFin.net,
-          isEntry: false,
-          isRenewal: true,
-          renewalIndex: patient.renewalsCount || 1
-        });
-        recordCount++;
-      }
-    });
-
-    // Sort month keys descending (newest first)
-    const sortedKeys = Object.keys(groups).sort((a, b) => b.localeCompare(a));
-
-    // Sort items within each month: entry/renewal date descending
-    sortedKeys.forEach(k => {
-      groups[k].sort((a, b) => new Date(b.eventDate || 0) - new Date(a.eventDate || 0));
-    });
-
-    return {
-      monthlyGroups: groups,
-      monthKeys: sortedKeys,
-      totalRecordsCount: recordCount
-    };
-  }, [rawPatients, currentMonthKey]);
+    return buildPatientMonthlyGroups(rawPatients);
+  }, [rawPatients]);
 
   // If searching, auto-expand all months that have matching patients
   useEffect(() => {
@@ -690,10 +541,36 @@ export default function PatientsPage() {
                                   <td className="mono-table-td font-semibold text-white">{formatCurrency(item.monthStayValue)}</td>
 
                                   {/* Paid */}
-                                  <td className="mono-table-td text-emerald-400 font-semibold">{formatCurrency(item.monthPaid)}</td>
+                                  {(() => {
+                                    const stay = Number(item.monthStayValue || 0);
+                                    const paid = Number(item.monthPaid || 0);
+                                    const isOverpaid = paid > stay;
+                                    const displayPaid = isOverpaid ? -(paid - stay) : paid;
+
+                                    return (
+                                      <td className="mono-table-td">
+                                        {isOverpaid ? (
+                                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold font-mono bg-rose-600/30 text-rose-300 border border-rose-500/40">
+                                            {formatCurrency(displayPaid)}
+                                          </span>
+                                        ) : (
+                                          <span className="font-semibold font-mono text-emerald-400">
+                                            {formatCurrency(displayPaid)}
+                                          </span>
+                                        )}
+                                      </td>
+                                    );
+                                  })()}
 
                                   {/* Remaining */}
-                                  <td className="mono-table-td text-rose-400 font-semibold">{formatCurrency(item.monthRemaining)}</td>
+                                  {(() => {
+                                    const patientRem = Number(patient.remaining ?? patient.remainingAmount ?? 0);
+                                    return (
+                                      <td className={`mono-table-td font-semibold ${patientRem > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                                        {formatCurrency(patientRem)}
+                                      </td>
+                                    );
+                                  })()}
 
                                   {/* Net Revenue */}
                                   <td className="mono-table-td">
@@ -744,7 +621,7 @@ export default function PatientsPage() {
                               <td className="mono-table-td text-emerald-400 font-mono text-sm">
                                 {formatCurrency(totalMonthPaid)}
                               </td>
-                              <td className="mono-table-td text-rose-400 font-mono text-sm">
+                              <td className={`mono-table-td font-mono text-sm ${totalMonthRemaining > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
                                 {formatCurrency(totalMonthRemaining)}
                               </td>
                               <td className="mono-table-td">

@@ -22,10 +22,14 @@ export default function ReportsPage() {
 
     try {
       const branchTitle = branch?.name || 'فرع المصحة';
-      const periodTitle = `الفترة: ${getArabicMonthName(month)} ${year}`;
+      const periodTitle = month === 'all' 
+        ? `الفترة: إجمالي عام ${year} (كافة الشهور)` 
+        : `الفترة: ${getArabicMonthName(month)} ${year}`;
 
       await exportStyledExcel({
-        filename: `تقرير_فرع_${branchTitle}_${month}_${year}.xlsx`,
+        filename: month === 'all' 
+          ? `تقرير_شامل_فرع_${branchTitle}_عام_${year}.xlsx`
+          : `تقرير_فرع_${branchTitle}_${month}_${year}.xlsx`,
         sheets: [
           {
             name: 'الملخص المالي',
@@ -101,9 +105,10 @@ export default function ReportsPage() {
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <select
             value={month}
-            onChange={(e) => setMonth(Number(e.target.value))}
-            className="mono-input text-xs w-36"
+            onChange={(e) => setMonth(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+            className="mono-input text-xs w-48"
           >
+            <option value="all">كل الشهور (إجمالي السنة)</option>
             {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
               <option key={m} value={m}>{getArabicMonthName(m)} ({m})</option>
             ))}
@@ -171,7 +176,7 @@ export default function ReportsPage() {
               <PieIcon className="w-4 h-4 text-white" />
               <span>تفاصيل المصروفات حسب التصنيف</span>
             </h3>
-            <span className="text-xs text-zinc-400">{getArabicMonthName(month)} {year}</span>
+            <span className="text-xs text-zinc-400">{month === 'all' ? `إجمالي عام ${year}` : `${getArabicMonthName(month)} ${year}`}</span>
           </div>
 
           <div className="space-y-2.5">
@@ -195,7 +200,7 @@ export default function ReportsPage() {
               <Users className="w-4 h-4 text-white" />
               <span>إحصائيات النزلاء بالفرع</span>
             </h3>
-            <span className="text-xs text-zinc-400">{getArabicMonthName(month)} {year}</span>
+            <span className="text-xs text-zinc-400">{month === 'all' ? `إجمالي عام ${year}` : `${getArabicMonthName(month)} ${year}`}</span>
           </div>
 
           <div className="space-y-4 pt-2">

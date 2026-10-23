@@ -71,7 +71,32 @@ export const useAddPayment = () => {
       queryClient.invalidateQueries({ queryKey: ['patient', variables.patientId] });
       queryClient.invalidateQueries({ queryKey: ['patients'] });
       queryClient.invalidateQueries({ queryKey: ['finance'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
       showToast('تم إضافة الدفعة بنجاح', 'success');
+    }
+  });
+};
+
+export const useDeletePayment = () => {
+  const queryClient = useQueryClient();
+  const showToast = useUIStore(s => s.showToast);
+
+  return useMutation({
+    mutationFn: ({ paymentId }) => patientsService.deletePayment(paymentId),
+    onSuccess: (_, variables) => {
+      if (variables?.patientId) {
+        queryClient.invalidateQueries({ queryKey: ['patient', variables.patientId] });
+      }
+      queryClient.invalidateQueries({ queryKey: ['patients'] });
+      queryClient.invalidateQueries({ queryKey: ['finance'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
+      queryClient.invalidateQueries({ queryKey: ['audit-logs'] });
+      showToast('تم حذف دفعة السداد بنجاح وتحديث الحسابات', 'success');
+    },
+    onError: (err) => {
+      showToast(err.message || 'حدث خطأ أثناء حذف دفعة السداد', 'error');
     }
   });
 };

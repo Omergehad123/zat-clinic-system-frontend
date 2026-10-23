@@ -2,12 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { useUIStore } from '../../store/useUIStore';
-import { useAddPatient, useAddPayment, useAddPatientExpense, useDischargePatient, useDeletePatient, useUpdatePatient, useRenewPatient } from '../../hooks/usePatients';
+import { useAddPatient, useAddPayment, useDeletePayment, useAddPatientExpense, useDischargePatient, useDeletePatient, useUpdatePatient, useRenewPatient } from '../../hooks/usePatients';
 import { useAddEmployee, useUpdateEmployee, useDeleteEmployee, useEmployees } from '../../hooks/useEmployees';
 import { useAddAdvance } from '../../hooks/useAdvances';
 import { useCreateInvoice, useUpdateInvoice } from '../../hooks/useInvoices';
 import { useAddExpense } from '../../hooks/useFinance';
-import { formatCurrency } from '../../utils/formatters';
+import { formatCurrency, formatDate } from '../../utils/formatters';
 import { X, Plus, Trash2, Calculator, LogOut, CheckCircle, AlertTriangle, Pencil, RotateCcw } from 'lucide-react';
 
 export default function GlobalModals() {
@@ -17,6 +17,7 @@ export default function GlobalModals() {
   const updatePatientMutation = useUpdatePatient();
   const renewPatientMutation = useRenewPatient();
   const addPaymentMutation = useAddPayment();
+  const deletePaymentMutation = useDeletePayment();
   const addPatientExpenseMutation = useAddPatientExpense();
   const dischargePatientMutation = useDischargePatient();
   const deletePatientMutation = useDeletePatient();
@@ -196,6 +197,7 @@ export default function GlobalModals() {
             {activeModal === 'ADD_EXPENSE' && 'إضافة مصروف مباشر بالفرع'}
             {activeModal === 'DISCHARGE_PATIENT' && `تسجيل خروج النزيل: ${modalData?.name}`}
             {activeModal === 'DELETE_PATIENT' && `تأكيد حذف النزيل: ${modalData?.name}`}
+            {activeModal === 'DELETE_PAYMENT' && `تأكيد حذف دفعة سداد إقامة`}
           </h2>
           <button
             onClick={closeModal}
@@ -1401,6 +1403,40 @@ export default function GlobalModals() {
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 {deleteEmployeeMutation.isPending ? 'جاري الحذف...' : 'تأكيد الحذف النهائي'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 11. DELETE PAYMENT CONFIRMATION MODAL */}
+        {activeModal === 'DELETE_PAYMENT' && (
+          <div className="space-y-4">
+            <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-start gap-3 text-rose-400 text-xs leading-relaxed">
+              <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+              <div>
+                <strong className="block text-white font-bold mb-1 text-sm">تأكيد حذف دفعة السداد!</strong>
+                هل أنت متأكد من حذف دفعة السداد بقيمة <strong className="text-white font-mono">{formatCurrency(modalData?.amount)}</strong> {modalData?.date ? `بتاريخ ${formatDate(modalData?.date)}` : ''} للنزيل <strong className="text-white">{modalData?.patientName || modalData?.name}</strong>؟
+                <p className="mt-1.5 text-zinc-400">
+                  سيتم خصم هذه الدفعة نهائياً من إجمالي المدفوعات وتحديث الرصيد المتبقي للإقامة، وإلغاء الإيراد المقابل لها من سجل المعاملات المالية والتقارير.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-3 flex items-center justify-end gap-3">
+              <button type="button" onClick={closeModal} className="mono-btn-secondary text-xs">إلغاء</button>
+              <button
+                type="button"
+                disabled={deletePaymentMutation.isPending}
+                onClick={() => {
+                  deletePaymentMutation.mutate({
+                    paymentId: modalData?.paymentId || modalData?.id || modalData?._id,
+                    patientId: modalData?.patientId
+                  }, { onSuccess: closeModal });
+                }}
+                className="mono-btn-danger text-xs flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                {deletePaymentMutation.isPending ? 'جاري الحذف...' : 'تأكيد حذف الدفعة'}
               </button>
             </div>
           </div>

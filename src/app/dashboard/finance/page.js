@@ -1,71 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useFinance } from '../../../hooks/useFinance';
 import { usePatients } from '../../../hooks/usePatients';
 import { useUIStore } from '../../../store/useUIStore';
 import { formatCurrency, formatDate } from '../../../utils/formatters';
+import { buildPatientMonthlyGroups } from '../../../utils/patientMonthlyCalculator';
 import { TrendingUp, TrendingDown, DollarSign, Wallet, Plus, ArrowUpLeft, ArrowDownRight, RefreshCw } from 'lucide-react';
-
-function formatDateToKey(dateInput) {
-  if (!dateInput) return null;
-  const d = new Date(dateInput);
-  if (isNaN(d.getTime())) return null;
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  return `${y}-${m}`;
-}
-
-function calculateAllMonthsFinancials(patientsList) {
-  if (!patientsList || !Array.isArray(patientsList) || patientsList.length === 0) {
-    return { totalPaid: 0, totalPatientExpenses: 0 };
-  }
-  
-  const now = new Date();
-  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const groups = {};
-
-  patientsList.forEach(patient => {
-    // 1. Entry Month
-    const entryKey = formatDateToKey(patient.entryDate || patient.createdAt) || currentMonthKey;
-    if (!groups[entryKey]) groups[entryKey] = [];
-    groups[entryKey].push(patient);
-
-    // 2. Renewal Months from timeline
-    const seenRenewalMonths = new Set();
-    if (Array.isArray(patient.timeline)) {
-      patient.timeline
-        .filter(e => e.type === 'renewal')
-        .forEach((renEvent) => {
-          const renKey = formatDateToKey(renEvent.date);
-          if (renKey && !seenRenewalMonths.has(renKey)) {
-            seenRenewalMonths.add(renKey);
-            if (!groups[renKey]) groups[renKey] = [];
-            groups[renKey].push(patient);
-          }
-        });
-    }
-
-    // Fallback: lastRenewalDate
-    const lastRenKey = formatDateToKey(patient.lastRenewalDate || patient.renewalDate);
-    if (lastRenKey && !seenRenewalMonths.has(lastRenKey)) {
-      seenRenewalMonths.add(lastRenKey);
-      if (!groups[lastRenKey]) groups[lastRenKey] = [];
-      groups[lastRenKey].push(patient);
-    }
-  });
-
-  let totalPaid = 0;
-  let totalPatientExpenses = 0;
-  Object.values(groups).forEach(items => {
-    items.forEach(p => {
-      totalPaid += Number(p.paidAmount ?? p.paid ?? 0);
-      totalPatientExpenses += Number(p.totalExpenses ?? p.expensesTotal ?? 0);
-    });
-  });
-
-  return { totalPaid, totalPatientExpenses };
-}
 
 export default function FinancePage() {
   const [activeTab, setActiveTab] = useState('INCOME'); // 'INCOME' | 'EXPENSES' | 'TRANSACTIONS'
@@ -74,9 +15,12 @@ export default function FinancePage() {
   const { data: patients, isLoading: loadingPatients, refetch: refetchPatients } = usePatients();
   const openModal = useUIStore(s => s.openModal);
 
-  // إجمالي الإيرادات = مجموع عمود "المدفوع" في كافة الشهور (دخول جديد + تجديدات)
-  const { totalPaid: allMonthsPaid, totalPatientExpenses: allMonthsPatientExpenses } = calculateAllMonthsFinancials(patients);
-  const totalIncome = allMonthsPaid > 0 ? allMonthsPaid : (finance?.totals?.totalIncome || 0);
+  // إجمالي الإيرادات = مجموع عمود "قيمة الإقامة" في كافة أدراج الشهور (دخول جديد + تجديدات)
+  const monthlyData = useMemo(() => buildPatientMonthlyGroups(patients), [patients]);
+  const totalStayValue = monthlyData.totals.totalStayValue;
+  const allMonthsPatientExpenses = monthlyData.totals.totalExpenses;
+
+  const totalIncome = totalStayValue > 0 ? totalStayValue : (finance?.totals?.totalIncome || 0);
 
   // إجمالي المصروفات والسلف = مجموع الفواتير + مجموع السلف + مجموع مصاريف النزلاء بكافة الشهور
   const invoicesTotal = Number(finance?.totals?.invoicesTotal || 0);

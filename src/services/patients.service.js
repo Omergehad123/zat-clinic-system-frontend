@@ -78,6 +78,13 @@ export const patientsService = {
     return res.data;
   },
 
+  deletePayment: async (paymentId) => {
+    const res = await apiFetch(`/patient-payments/${paymentId}`, {
+      method: 'DELETE'
+    });
+    return res;
+  },
+
   getPayments: async (patientId) => {
     const res = await apiFetch(`/patient-payments?patientId=${patientId}`);
     return res.data || [];
