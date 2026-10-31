@@ -52,11 +52,19 @@ export function buildPatientMonthlyGroups(rawPatients) {
     const renewalEvents = Array.isArray(patient.timeline) ? patient.timeline.filter(e => e.type === 'renewal') : [];
     const sumRenewals = renewalEvents.reduce((s, r) => s + (Number(r.amount) || 0), 0);
     
+    const entryKey = formatDateToKey(patient.entryDate || patient.createdAt) || currentMonthKey;
+    const lastRenKey = formatDateToKey(patient.lastRenewalDate || patient.renewalDate);
+    const hasExternalRenewal = lastRenKey && lastRenKey !== entryKey;
+    const hasRenewals = renewalEvents.length > 0 || hasExternalRenewal;
+
     let entryStay = 0;
     if (entryEvent && entryEvent.amount) {
       entryStay = Number(entryEvent.amount);
     } else if (sumRenewals > 0) {
       entryStay = Math.max(0, patientStay - sumRenewals);
+    } else if (hasExternalRenewal) {
+      const periods = (Number(patient.renewalsCount) || 1) + 1;
+      entryStay = periods > 0 ? Math.round(patientStay / periods) : patientStay;
     } else {
       entryStay = patientStay;
     }
@@ -72,11 +80,10 @@ export function buildPatientMonthlyGroups(rawPatients) {
     };
 
     // 1. Entry Month
-    const entryKey = formatDateToKey(patient.entryDate || patient.createdAt) || currentMonthKey;
     if (!groups[entryKey]) groups[entryKey] = [];
     const entryExp = calcMonthExpenses(entryKey, entryEvent?.initialExpenses);
 
-    if (renewalEvents.length === 0) {
+    if (!hasRenewals) {
       // Single entry patient (no renewals) - entire financials belong to this entry
       groups[entryKey].push({
         id: `${patient.id || patient._id}-entry-${entryKey}`,

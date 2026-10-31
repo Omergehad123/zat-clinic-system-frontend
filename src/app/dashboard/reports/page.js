@@ -6,7 +6,8 @@ import { useAuthStore } from '../../../store/useAuthStore';
 import { useUIStore } from '../../../store/useUIStore';
 import { formatCurrency, getArabicMonthName, formatNumber } from '../../../utils/formatters';
 import { exportStyledExcel } from '../../../utils/excelExporter';
-import { BarChart3, Download, Calendar, TrendingUp, TrendingDown, DollarSign, Users, PieChart as PieIcon } from 'lucide-react';
+import { exportComprehensiveClinicExcel } from '../../../utils/clinicFullExcelExporter';
+import { BarChart3, Download, Calendar, TrendingUp, TrendingDown, DollarSign, Users, PieChart as PieIcon, Loader2 } from 'lucide-react';
 
 export default function ReportsPage() {
   const [month, setMonth] = useState(9);
@@ -17,61 +18,24 @@ export default function ReportsPage() {
 
   const { data: report, isLoading } = useReports(month, year);
 
+  const [isExporting, setIsExporting] = useState(false);
+
   const handleExportExcel = async () => {
-    if (!report) return;
-
+    setIsExporting(true);
     try {
-      const branchTitle = branch?.name || 'فرع المصحة';
-      const periodTitle = month === 'all' 
-        ? `الفترة: إجمالي عام ${year} (كافة الشهور)` 
-        : `الفترة: ${getArabicMonthName(month)} ${year}`;
-
-      await exportStyledExcel({
-        filename: month === 'all' 
-          ? `تقرير_شامل_فرع_${branchTitle}_عام_${year}.xlsx`
-          : `تقرير_فرع_${branchTitle}_${month}_${year}.xlsx`,
-        sheets: [
-          {
-            name: 'الملخص المالي',
-            title: `التقرير المالي والإحصائي — ${branchTitle}`,
-            subtitle: periodTitle,
-            columns: [
-              { header: 'المؤشر / البيان المالي', key: 'metric', width: 35, align: 'right', headerColor: 'FF047857' },
-              { header: 'القيمة (جنيه مصري / عدد)', key: 'value', width: 25, align: 'center', headerColor: 'FF047857' }
-            ],
-            rows: [
-              { metric: 'إجمالي الإيرادات', value: report.totals?.totalRevenue || 0 },
-              { metric: 'إجمالي المصروفات والسلف', value: report.totals?.totalExpenses || 0 },
-              { metric: 'صافي الإيرادات', value: report.totals?.netRevenue || 0 },
-              { metric: 'عدد النزلاء الحاليين', value: report.patientStats?.current || 0 },
-              { metric: 'النزلاء الجدد هذا الشهر', value: report.patientStats?.newCount || 0 },
-              { metric: 'النزلاء المغادرون هذا الشهر', value: report.patientStats?.exitCount || 0 }
-            ]
-          },
-          {
-            name: 'توزيع المصروفات',
-            title: `تفاصيل المصروفات حسب التصنيف — ${branchTitle}`,
-            subtitle: periodTitle,
-            columns: [
-              { header: 'تصنيف المصروفات', key: 'name', width: 30, align: 'right', headerColor: 'FFB91C1C' },
-              { header: 'المبلغ الإجمالي (جنيه)', key: 'value', width: 25, type: 'currency', align: 'center', headerColor: 'FFB91C1C' }
-            ],
-            rows: (report.categoryBreakdown || []).map(c => ({
-              name: c.name,
-              value: c.value || 0
-            })),
-            summaryRow: {
-              name: 'إجمالي المصروفات:',
-              value: (report.categoryBreakdown || []).reduce((s, c) => s + (c.value || 0), 0)
-            }
-          }
-        ]
+      await exportComprehensiveClinicExcel({
+        month,
+        year,
+        branch,
+        existingReport: report
       });
 
-      showToast('تم تصدير التقرير المالي المنسق بنجاح إلى ملف Excel (.xlsx)', 'success');
+      showToast('تم تصدير ملف Excel الشامل بنجاح بكافة الشيتات (النزلاء، الدكاترة والتمريض، المشرفين والعمال، المصاريف اليومية، الفواتير، الموظفين، السلف، ملخص الإيرادات والمصاريف)', 'success');
     } catch (err) {
       console.error(err);
       showToast('حدث خطأ أثناء تصدير ملف Excel', 'error');
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -87,11 +51,20 @@ export default function ReportsPage() {
 
         <button
           onClick={handleExportExcel}
-          disabled={isLoading}
-          className="mono-btn-primary text-sm shadow-md self-start sm:self-auto"
+          disabled={isLoading || isExporting}
+          className="mono-btn-primary text-sm shadow-md self-start sm:self-auto flex items-center gap-2"
         >
-          <Download className="w-4 h-4" />
-          تصدير Excel
+          {isExporting ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin text-white" />
+              <span>جاري تجهيز Excel...</span>
+            </>
+          ) : (
+            <>
+              <Download className="w-4 h-4" />
+              <span>تصدير ملف Excel الشامل</span>
+            </>
+          )}
         </button>
       </div>
 
