@@ -101,16 +101,30 @@ export default function ReportsPage() {
       {/* 3 Summary Metrics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
-        <div className="mono-card p-6">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-zinc-400">إجمالي الإيرادات</span>
-            <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-white">
-              <TrendingUp className="w-5 h-5" />
+        <div className="mono-card p-6 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-zinc-400">إجمالي الإيرادات</span>
+              <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-white">
+                <TrendingUp className="w-5 h-5" />
+              </div>
+            </div>
+            <div className="text-3xl font-black text-white mt-4">
+              {isLoading ? '...' : formatCurrency(report?.totals?.totalRevenue)}
             </div>
           </div>
-          <div className="text-3xl font-black text-white mt-4">
-            {isLoading ? '...' : formatCurrency(report?.totals?.totalRevenue)}
-          </div>
+          {month !== 'all' && !isLoading && (
+            <div className="mt-4 pt-3 border-t border-zinc-800 text-[11px] text-zinc-400 space-y-1">
+              <div className="flex justify-between items-center">
+                <span>إيرادات إقامة الشهر الحالي:</span>
+                <span className="font-semibold text-zinc-300 font-mono">{formatCurrency(report?.totals?.currentMonthStay || 0)}</span>
+              </div>
+              <div className="flex justify-between items-center text-emerald-400">
+                <span>+ صافي إيرادات شهر {report?.totals?.prevMonthName || getArabicMonthName(month === 1 ? 12 : month - 1)}:</span>
+                <span className="font-bold font-mono">+{formatCurrency(report?.totals?.previousMonthNet || 0)}</span>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="mono-card p-6">

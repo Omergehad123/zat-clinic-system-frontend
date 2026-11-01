@@ -1073,10 +1073,10 @@ function buildSummarySheet(workbook, { totalRevenue, totalExpenses, previousSett
   // Row 3: Sub-headers:
   // Col 3: الايرادات (peach)
   // Col 4: المصاريف (peach)
-  // Col 5: تصفية الشهر السابق (yellow)
+  // Col 5: صافي الشهر السابق (yellow)
   sheet.getCell(3, 3).value = 'الايرادات';
   sheet.getCell(3, 4).value = 'المصاريف';
-  sheet.getCell(3, 5).value = 'تصفية الشهر السابق';
+  sheet.getCell(3, 5).value = 'صافي الشهر السابق';
   sheet.getRow(3).height = 32;
 
   sheet.getCell(3, 3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.softPeach } };
@@ -1152,7 +1152,7 @@ function buildSummarySheet(workbook, { totalRevenue, totalExpenses, previousSett
   const prevMonthName = getArabicMonthName(prevMonth);
 
   sheet.getCell(4, 7).value = `01/${String(month === 'all' ? 10 : month).padStart(2, '0')}/${year}`;
-  sheet.getCell(4, 8).value = month === 'all' ? 'تسوية ورصيد سنوي' : `صافي إيرادات تصفية شهر ${prevMonthName} ${prevYear}`;
+  sheet.getCell(4, 8).value = month === 'all' ? 'تسوية ورصيد سنوي' : `صافي إيرادات شهر ${prevMonthName} ${prevYear}`;
   sheet.getCell(4, 9).value = previousSettlement || 0;
   [7, 8, 9].forEach(c => {
     const cell = sheet.getCell(4, c);
@@ -1259,19 +1259,52 @@ export async function exportComprehensiveClinicExcel({
     previousSettlement = 0;
   } else {
     const cur = calcMonthFinancials(monthKey);
-    totalRevenue = existingReport?.totals?.totalRevenue ?? cur.revenue;
-    totalExpenses = existingReport?.totals?.totalExpenses ?? cur.expenses;
 
-    // Calculate previous month net revenue (تصفية الشهر السابق)
-    let prevMonth = Number(month) - 1;
-    let prevYear = Number(year);
-    if (prevMonth === 0) {
-      prevMonth = 12;
-      prevYear -= 1;
+    if (existingReport?.totals?.previousMonthNet !== undefined) {
+      previousSettlement = existingReport.totals.previousMonthNet;
+      totalRevenue = existingReport.totals.totalRevenue;
+      totalExpenses = existingReport.totals.totalExpenses;
+    } else {
+      const allKeys = new Set();
+      Object.keys(monthlyGroups).forEach(k => allKeys.add(k));
+      invoices.forEach(i => { const k = formatDateToKey(i.date); if (k) allKeys.add(k); });
+      advances.forEach(a => { const k = formatDateToKey(a.date); if (k) allKeys.add(k); });
+      transactions.forEach(t => { const k = formatDateToKey(t.date); if (k) allKeys.add(k); });
+
+      const validKeys = [...allKeys].filter(k => k && /^\d{4}-\d{2}$/.test(k)).sort();
+      const startKey = (validKeys[0] && validKeys[0] < monthKey) ? validKeys[0] : monthKey;
+
+      const getConsecutiveMonthKeys = (sKey, eKey) => {
+        if (!sKey || !eKey) return [];
+        if (sKey > eKey) return [eKey];
+        const keys = [];
+        let [curY, curM] = sKey.split('-').map(Number);
+        const [endY, endM] = eKey.split('-').map(Number);
+        while (curY < endY || (curY === endY && curM <= endM)) {
+          keys.push(`${curY}-${String(curM).padStart(2, '0')}`);
+          curM++;
+          if (curM > 12) { curM = 1; curY++; }
+        }
+        return keys;
+      };
+
+      const consecutiveKeys = getConsecutiveMonthKeys(startKey, monthKey);
+      let runningNet = 0;
+
+      consecutiveKeys.forEach(k => {
+        const fin = calcMonthFinancials(k);
+        const prevNet = runningNet;
+        const effRev = fin.revenue + prevNet;
+        const finNet = effRev - fin.expenses;
+        runningNet = finNet;
+
+        if (k === monthKey) {
+          previousSettlement = prevNet;
+          totalRevenue = effRev;
+          totalExpenses = fin.expenses;
+        }
+      });
     }
-    const prevMonthKey = `${prevYear}-${String(prevMonth).padStart(2, '0')}`;
-    const prevFin = calcMonthFinancials(prevMonthKey);
-    previousSettlement = prevFin.net;
   }
 
   // Create Workbook

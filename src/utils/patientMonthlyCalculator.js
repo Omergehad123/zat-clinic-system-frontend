@@ -58,9 +58,13 @@ export function buildPatientMonthlyGroups(rawPatients) {
     const hasRenewals = renewalEvents.length > 0 || hasExternalRenewal;
 
     let entryStay = 0;
-    if (entryEvent && entryEvent.amount) {
-      entryStay = Number(entryEvent.amount);
+    if (!hasRenewals) {
+      // Single-entry patient: authoritative stay value is patient accommodation amount
+      entryStay = (patient.accommodationAmount !== undefined || patient.stayValue !== undefined)
+        ? patientStay
+        : Number(entryEvent?.amount || 0);
     } else if (sumRenewals > 0) {
+      // Patient with renewals: entry stay is remaining stay value after all renewals
       entryStay = Math.max(0, patientStay - sumRenewals);
     } else if (hasExternalRenewal) {
       const periods = (Number(patient.renewalsCount) || 1) + 1;

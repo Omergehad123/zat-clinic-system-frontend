@@ -1,5 +1,6 @@
 import { apiFetch, getAuthToken } from './api';
 import { buildPatientMonthlyGroups, formatDateToKey } from '../utils/patientMonthlyCalculator';
+import { getArabicMonthName } from '../utils/formatters';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -128,7 +129,95 @@ export const reportsService = {
     const directExpensesTotal = filteredDirectExpenses.reduce((s, t) => s + Number(t.amount || 0), 0);
 
     const totalExpenses = invoicesTotal + advancesTotal + monthPatientExpenses + directExpensesTotal;
-    const netRevenue = totalRevenue - totalExpenses;
+
+    // Helper to calculate standalone financials for any monthKey (YYYY-MM)
+    const calcMonthFin = (mKey) => {
+      const items = monthlyGroups[mKey] || [];
+      const rev = items.reduce((sum, item) => sum + Number(item.monthStayValue || 0), 0);
+      const patExp = items.reduce((sum, item) => sum + Number(item.monthExpenses || 0), 0);
+
+      const invTotal = invoices.filter(inv => {
+        if (!inv.date) return false;
+        return formatDateToKey(inv.date) === mKey;
+      }).reduce((s, inv) => s + Number(inv.totalAmount || 0), 0);
+
+      const advTotal = advances.filter(adv => {
+        if (!adv.date) return false;
+        return formatDateToKey(adv.date) === mKey;
+      }).reduce((s, adv) => s + Number(adv.amount || 0), 0);
+
+      const dirTotal = transactions.filter(t => {
+        if (t.type !== 'expense' || !t.date) return false;
+        if (formatDateToKey(t.date) !== mKey) return false;
+        const cat = t.category || '';
+        return !t.invoiceId && !t.employeeId && !t.patientId && cat !== 'Employee Advances' && cat !== 'PatientExpense' && !cat.includes('سلف') && !cat.includes('مصاريف');
+      }).reduce((s, t) => s + Number(t.amount || 0), 0);
+
+      const totalExp = invTotal + advTotal + patExp + dirTotal;
+      return {
+        revenue: rev,
+        expenses: totalExp,
+        net: rev - totalExp
+      };
+    };
+
+    let previousMonthNet = 0;
+    let prevMonth = null;
+    let prevYear = null;
+    let currentMonthStay = totalRevenue;
+    let effectiveTotalRevenue = totalRevenue;
+    let netRevenue = totalRevenue - totalExpenses;
+
+    if (!isAllMonths) {
+      prevMonth = m - 1;
+      prevYear = y;
+      if (prevMonth === 0) {
+        prevMonth = 12;
+        prevYear -= 1;
+      }
+
+      // Collect all month keys to find earliest recorded month
+      const allKeys = new Set();
+      Object.keys(monthlyGroups).forEach(k => allKeys.add(k));
+      invoices.forEach(i => { const k = formatDateToKey(i.date); if (k) allKeys.add(k); });
+      advances.forEach(a => { const k = formatDateToKey(a.date); if (k) allKeys.add(k); });
+      transactions.forEach(t => { const k = formatDateToKey(t.date); if (k) allKeys.add(k); });
+
+      const validKeys = [...allKeys].filter(k => k && /^\d{4}-\d{2}$/.test(k)).sort();
+      const startKey = (validKeys[0] && validKeys[0] < monthKey) ? validKeys[0] : monthKey;
+
+      const getConsecutiveMonthKeys = (sKey, eKey) => {
+        if (!sKey || !eKey) return [];
+        if (sKey > eKey) return [eKey];
+        const keys = [];
+        let [curY, curM] = sKey.split('-').map(Number);
+        const [endY, endM] = eKey.split('-').map(Number);
+        while (curY < endY || (curY === endY && curM <= endM)) {
+          keys.push(`${curY}-${String(curM).padStart(2, '0')}`);
+          curM++;
+          if (curM > 12) { curM = 1; curY++; }
+        }
+        return keys;
+      };
+
+      const consecutiveKeys = getConsecutiveMonthKeys(startKey, monthKey);
+      let runningNet = 0;
+
+      consecutiveKeys.forEach(k => {
+        const fin = calcMonthFin(k);
+        const prevNet = runningNet;
+        const effRev = fin.revenue + prevNet;
+        const finNet = effRev - fin.expenses;
+        runningNet = finNet;
+
+        if (k === monthKey) {
+          currentMonthStay = fin.revenue;
+          previousMonthNet = prevNet;
+          effectiveTotalRevenue = effRev;
+          netRevenue = finNet;
+        }
+      });
+    }
 
     // Categories breakdown
     const categoryMap = {};
@@ -158,9 +247,14 @@ export const reportsService = {
       month: isAllMonths ? 'all' : m,
       year: y,
       totals: {
-        totalRevenue,
+        currentMonthStay,
+        previousMonthNet,
+        totalRevenue: effectiveTotalRevenue,
         totalExpenses,
         netRevenue,
+        prevMonth,
+        prevYear,
+        prevMonthName: !isAllMonths ? getArabicMonthName(prevMonth) : null,
         totalAdvances: advancesTotal,
         totalOutstanding: patients.reduce((s, p) => s + Math.max(0, Number(p.remainingAmount ?? p.remaining ?? 0)), 0)
       },

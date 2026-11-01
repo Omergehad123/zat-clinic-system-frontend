@@ -158,6 +158,7 @@ export const useUpdatePatient = () => {
       queryClient.invalidateQueries({ queryKey: ['patient', variables.id] });
       queryClient.invalidateQueries({ queryKey: ['patients'] });
       queryClient.invalidateQueries({ queryKey: ['finance'] });
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
       showToast('تم تحديث بيانات النزيل بنجاح', 'success');
     },
     onError: (err) => {
