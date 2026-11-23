@@ -101,6 +101,27 @@ export const useDeletePayment = () => {
   });
 };
 
+export const useDeletePatientRenewal = () => {
+  const queryClient = useQueryClient();
+  const showToast = useUIStore(s => s.showToast);
+
+  return useMutation({
+    mutationFn: ({ patientId, renewalId }) => patientsService.deleteRenewal(patientId, renewalId),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['patient', variables.patientId] });
+      queryClient.invalidateQueries({ queryKey: ['patients'] });
+      queryClient.invalidateQueries({ queryKey: ['finance'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
+      queryClient.invalidateQueries({ queryKey: ['audit-logs'] });
+      showToast('تم إلغاء التجديد وحذف الدفعات والمصاريف المرتبطة به', 'success');
+    },
+    onError: (err) => {
+      showToast(err.message || 'حدث خطأ أثناء إلغاء التجديد', 'error');
+    }
+  });
+};
+
 export const useAddPatientExpense = () => {
   const queryClient = useQueryClient();
   const showToast = useUIStore(s => s.showToast);
@@ -112,6 +133,27 @@ export const useAddPatientExpense = () => {
       queryClient.invalidateQueries({ queryKey: ['patients'] });
       queryClient.invalidateQueries({ queryKey: ['finance'] });
       showToast('تم إضافة مصروف النزيل بنجاح', 'success');
+    }
+  });
+};
+
+export const useDeletePatientExpense = () => {
+  const queryClient = useQueryClient();
+  const showToast = useUIStore(s => s.showToast);
+
+  return useMutation({
+    mutationFn: ({ expenseId }) => patientsService.deletePatientExpense(expenseId),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['patient', variables.patientId] });
+      queryClient.invalidateQueries({ queryKey: ['patients'] });
+      queryClient.invalidateQueries({ queryKey: ['finance'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
+      queryClient.invalidateQueries({ queryKey: ['audit-logs'] });
+      showToast('تم حذف مصروف النزيل وتحديث الحسابات', 'success');
+    },
+    onError: (err) => {
+      showToast(err.message || 'حدث خطأ أثناء حذف مصروف النزيل', 'error');
     }
   });
 };

@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { usePatientDetails } from '../../../../hooks/usePatients';
+import { usePatientDetails, useDeletePatientRenewal, useDeletePatientExpense } from '../../../../hooks/usePatients';
 import { useUIStore } from '../../../../store/useUIStore';
 import { useAuthStore } from '../../../../store/useAuthStore';
 import { formatCurrency, formatDate } from '../../../../utils/formatters';
@@ -43,6 +43,8 @@ export default function PatientDetailPage() {
   const [timelineSortOrder, setTimelineSortOrder] = useState('DESC');
 
   const { data: patient, isLoading } = usePatientDetails(patientId);
+  const deleteRenewalMutation = useDeletePatientRenewal();
+  const deleteExpenseMutation = useDeletePatientExpense();
   const openModal = useUIStore(s => s.openModal);
   const user = useAuthStore(s => s.user);
   const isSuperAdmin = user?.role === 'super_admin';
@@ -63,8 +65,8 @@ export default function PatientDetailPage() {
       if (ev.type === 'discharge') hasDischarge = true;
 
       // Link paymentId if this is a payment event
-      let paymentId = ev._id || ev.id;
-      if (ev.type === 'payment' && Array.isArray(patient.payments)) {
+      let paymentId = ev.relatedPaymentId || ev._id || ev.id;
+      if (ev.type === 'payment' && !ev.relatedPaymentId && Array.isArray(patient.payments)) {
         const matchingPay = patient.payments.find(p => 
           Number(p.amount) === Number(ev.amount) &&
           Math.abs(new Date(p.date).getTime() - new Date(ev.date || ev.createdAt).getTime()) <= 24 * 60 * 60 * 1000
@@ -73,10 +75,20 @@ export default function PatientDetailPage() {
           paymentId = matchingPay.id || matchingPay._id;
         }
       }
+      let expenseId = ev.relatedExpenseId || null;
+      if (ev.type === 'expense' && !expenseId && Array.isArray(patient.expenses)) {
+        const matchingExpense = patient.expenses.find(exp =>
+          Number(exp.amount) === Number(ev.amount) &&
+          Math.abs(new Date(exp.date).getTime() - new Date(ev.date || ev.createdAt).getTime()) <= 24 * 60 * 60 * 1000
+        );
+        if (matchingExpense) expenseId = matchingExpense.id || matchingExpense._id;
+      }
 
       events.push({
         id: ev._id || ev.id || `tl-${Math.random()}`,
         paymentId: paymentId,
+        renewalId: ev.type === 'renewal' ? (ev._id || ev.id) : null,
+        expenseId,
         type: ev.type || 'custom',
         category: (ev.type === 'payment') ? 'PAYMENTS' : (ev.type === 'expense') ? 'EXPENSES' : 'STAY',
         title: ev.title || (ev.type === 'renewal' ? 'تجديد الإقامة' : ev.type === 'entry' ? 'دخول أولي' : 'حركة إقامة'),
@@ -144,6 +156,7 @@ export default function PatientDetailPage() {
       if (!exists) {
         events.push({
           id: exp._id || exp.id || `exp-${Math.random()}`,
+          expenseId: exp._id || exp.id,
           type: 'expense',
           category: 'EXPENSES',
           title: `مصروف نزيل (${exp.category || 'شخصي'})`,
@@ -210,6 +223,7 @@ export default function PatientDetailPage() {
     ...(patient.payments || []).map(p => ({
       type: 'إيراد - دفعة',
       id: p.id || p._id,
+      paymentId: p.id || p._id,
       date: p.date,
       amount: p.amount,
       details: `طريقة الدفع: ${p.paymentMethod || p.method || 'كاش'}`,
@@ -219,6 +233,7 @@ export default function PatientDetailPage() {
     ...(patient.expenses || []).map(e => ({
       type: 'مصروف نزيل',
       id: e.id || e._id,
+      expenseId: e.id || e._id,
       date: e.date,
       amount: e.amount,
       details: `التصنيف: ${e.category} | ${e.description}`,
@@ -622,6 +637,44 @@ export default function PatientDetailPage() {
                                 <span>حذف الدفعة</span>
                               </button>
                             )}
+                            {isSuperAdmin && item.type === 'renewal' && item.renewalId && (
+                              <button
+                                type="button"
+                                disabled={deleteRenewalMutation.isPending}
+                                onClick={() => {
+                                  if (window.confirm('هل تريد إلغاء هذا التجديد؟ سيتم حذف الدفعة والمصروف المرتبطين به وتحديث حساب النزيل.')) {
+                                    deleteRenewalMutation.mutate({
+                                      patientId: patient.id || patient._id,
+                                      renewalId: item.renewalId
+                                    });
+                                  }
+                                }}
+                                className="px-2 py-0.5 rounded-lg text-rose-400 hover:text-white hover:bg-rose-500/20 border border-rose-500/20 transition-all flex items-center gap-1 text-[11px] font-medium disabled:opacity-50"
+                                title="إلغاء التجديد"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                <span>حذف التجديد</span>
+                              </button>
+                            )}
+                            {isSuperAdmin && item.type === 'expense' && item.expenseId && (
+                              <button
+                                type="button"
+                                disabled={deleteExpenseMutation.isPending}
+                                onClick={() => {
+                                  if (window.confirm('هل تريد حذف هذا المصروف من حساب النزيل؟')) {
+                                    deleteExpenseMutation.mutate({
+                                      patientId: patient.id || patient._id,
+                                      expenseId: item.expenseId
+                                    });
+                                  }
+                                }}
+                                className="px-2 py-0.5 rounded-lg text-rose-400 hover:text-white hover:bg-rose-500/20 border border-rose-500/20 transition-all flex items-center gap-1 text-[11px] font-medium disabled:opacity-50"
+                                title="حذف مصروف النزيل"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                <span>حذف المصروف</span>
+                              </button>
+                            )}
                           </div>
                         </div>
 
@@ -775,12 +828,13 @@ export default function PatientDetailPage() {
                     <th className="mono-table-th">التصنيف</th>
                     <th className="mono-table-th">المبلغ</th>
                     <th className="mono-table-th">ملاحظات</th>
+                    {isSuperAdmin && <th className="mono-table-th text-center">إجراءات</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {patient.expenses?.length === 0 ? (
                     <tr>
-                      <td colSpan="5" className="text-center py-8 text-zinc-500">لا توجد مصاريف مسجلة لهذا النزيل</td>
+                      <td colSpan={isSuperAdmin ? 6 : 5} className="text-center py-8 text-zinc-500">لا توجد مصاريف مسجلة لهذا النزيل</td>
                     </tr>
                   ) : (
                     patient.expenses?.map(exp => (
@@ -794,6 +848,27 @@ export default function PatientDetailPage() {
                         </td>
                         <td className="mono-table-td font-bold text-white font-mono">{formatCurrency(exp.amount)}</td>
                         <td className="mono-table-td text-zinc-400">{exp.notes || '-'}</td>
+                        {isSuperAdmin && (
+                          <td className="mono-table-td text-center">
+                            <button
+                              type="button"
+                              disabled={deleteExpenseMutation.isPending}
+                              onClick={() => {
+                                if (window.confirm('هل تريد حذف هذا المصروف من حساب النزيل؟')) {
+                                  deleteExpenseMutation.mutate({
+                                    patientId: patient.id || patient._id,
+                                    expenseId: exp.id || exp._id
+                                  });
+                                }
+                              }}
+                              className="px-2.5 py-1 rounded-lg text-rose-400 hover:text-white hover:bg-rose-500/20 border border-rose-500/20 transition-all inline-flex items-center gap-1.5 text-xs font-semibold disabled:opacity-50"
+                              title="حذف مصروف النزيل"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>حذف المصروف</span>
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     ))
                   )}
@@ -846,6 +921,24 @@ export default function PatientDetailPage() {
                         })}
                         className="p-1.5 rounded-lg text-rose-400 hover:text-white hover:bg-rose-500/20 border border-rose-500/20 transition-all text-xs"
                         title="حذف هذه الدفعة"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {isSuperAdmin && !item.isIncome && item.expenseId && (
+                      <button
+                        type="button"
+                        disabled={deleteExpenseMutation.isPending}
+                        onClick={() => {
+                          if (window.confirm('هل تريد حذف هذا المصروف من حساب النزيل؟')) {
+                            deleteExpenseMutation.mutate({
+                              patientId: patient.id || patient._id,
+                              expenseId: item.expenseId
+                            });
+                          }
+                        }}
+                        className="p-1.5 rounded-lg text-rose-400 hover:text-white hover:bg-rose-500/20 border border-rose-500/20 transition-all text-xs disabled:opacity-50"
+                        title="حذف هذا المصروف"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>

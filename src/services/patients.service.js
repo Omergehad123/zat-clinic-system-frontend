@@ -47,6 +47,12 @@ export const patientsService = {
     return res.data;
   },
 
+  deleteRenewal: async (patientId, renewalId) => {
+    return apiFetch(`/patients/${patientId}/renewals/${renewalId}`, {
+      method: 'DELETE'
+    });
+  },
+
   updatePatient: async (id, patientData) => {
     const res = await apiFetch(`/patients/${id}`, {
       method: 'PUT',
@@ -100,6 +106,12 @@ export const patientsService = {
 
   addExpense: async (expenseData) => {
     return patientsService.addPatientExpense(expenseData);
+  },
+
+  deletePatientExpense: async (expenseId) => {
+    return apiFetch(`/patient-expenses/${expenseId}`, {
+      method: 'DELETE'
+    });
   },
 
   getExpenses: async (patientId) => {
