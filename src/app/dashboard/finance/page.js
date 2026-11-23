@@ -1,33 +1,20 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useFinance } from '../../../hooks/useFinance';
-import { usePatients } from '../../../hooks/usePatients';
 import { useUIStore } from '../../../store/useUIStore';
 import { formatCurrency, formatDate } from '../../../utils/formatters';
-import { buildPatientMonthlyGroups } from '../../../utils/patientMonthlyCalculator';
 import { TrendingUp, TrendingDown, DollarSign, Wallet, Plus, ArrowUpLeft, ArrowDownRight, RefreshCw } from 'lucide-react';
 
 export default function FinancePage() {
   const [activeTab, setActiveTab] = useState('INCOME'); // 'INCOME' | 'EXPENSES' | 'TRANSACTIONS'
 
   const { data: finance, isLoading: loadingFinance, refetch: refetchFinance } = useFinance();
-  const { data: patients, isLoading: loadingPatients, refetch: refetchPatients } = usePatients();
   const openModal = useUIStore(s => s.openModal);
 
-  // إجمالي الإيرادات = مجموع عمود "قيمة الإقامة" في كافة أدراج الشهور (دخول جديد + تجديدات)
-  const monthlyData = useMemo(() => buildPatientMonthlyGroups(patients), [patients]);
-  const totalStayValue = monthlyData.totals.totalStayValue;
-  const allMonthsPatientExpenses = monthlyData.totals.totalExpenses;
-
-  const totalIncome = totalStayValue > 0 ? totalStayValue : (finance?.totals?.totalIncome || 0);
-
-  // إجمالي المصروفات والسلف = مجموع الفواتير + مجموع السلف + مجموع مصاريف النزلاء بكافة الشهور
-  const invoicesTotal = Number(finance?.totals?.invoicesTotal || 0);
+  const totalIncome = Number(finance?.totals?.totalIncome || 0);
   const advancesTotal = Number(finance?.totals?.advancesTotal || 0);
-  const totalExpenses = (invoicesTotal > 0 || advancesTotal > 0 || allMonthsPatientExpenses > 0)
-    ? (invoicesTotal + advancesTotal + allMonthsPatientExpenses)
-    : (finance?.totals?.totalExpenses || 0);
+  const totalExpenses = Number(finance?.totals?.totalExpenses || 0);
 
   const netRevenue = totalIncome - totalExpenses;
 
@@ -41,11 +28,10 @@ export default function FinancePage() {
   const incomeList = finance?.income || [];
   const expenseList = finance?.expenses || [];
   const transactions = finance?.transactions || [];
-  const isLoading = loadingFinance || loadingPatients;
+  const isLoading = loadingFinance;
 
   const handleRefresh = () => {
     refetchFinance();
-    refetchPatients();
   };
 
   return (

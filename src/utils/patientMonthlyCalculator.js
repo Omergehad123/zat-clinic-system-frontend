@@ -63,9 +63,18 @@ export function buildPatientMonthlyGroups(rawPatients) {
       entryStay = (patient.accommodationAmount !== undefined || patient.stayValue !== undefined)
         ? patientStay
         : Number(entryEvent?.amount || 0);
-    } else if (sumRenewals > 0) {
-      // Patient with renewals: entry stay is remaining stay value after all renewals
-      entryStay = Math.max(0, patientStay - sumRenewals);
+    } else if (renewalEvents.length > 0) {
+      // Entry value is the value before the first renewal. This also handles
+      // replacement renewals, where sum of renewal values is not the entry value.
+      const firstRenewal = renewalEvents[0];
+      const previousEntryStay = Number(firstRenewal?.previousState?.accommodationAmount);
+      if (Number.isFinite(previousEntryStay) && previousEntryStay >= 0) {
+        entryStay = previousEntryStay;
+      } else if (sumRenewals > 0) {
+        entryStay = Math.max(0, patientStay - sumRenewals);
+      } else {
+        entryStay = patientStay;
+      }
     } else if (hasExternalRenewal) {
       const periods = (Number(patient.renewalsCount) || 1) + 1;
       entryStay = periods > 0 ? Math.round(patientStay / periods) : patientStay;
