@@ -1,6 +1,4 @@
 import { apiFetch } from './api';
-import { buildPatientMonthlyGroups } from '../utils/patientMonthlyCalculator';
-
 export const financeService = {
   getFinanceData: async (branchId = 'all', filters = {}) => {
     let query = '?';
@@ -44,9 +42,15 @@ export const financeService = {
     });
 
     if (patients.length > 0) {
-      const monthlyGroupsData = buildPatientMonthlyGroups(patients);
-      calculatedTotalIncome = monthlyGroupsData.totals.totalStayValue;
-      calculatedTotalPatientExpenses = monthlyGroupsData.totals.totalExpenses;
+      calculatedTotalIncome = patients.reduce(
+        (sum, patient) => sum + Number(
+          patient.totalAccommodationValue ??
+          patient.accommodationAmount ??
+          patient.stayValue ??
+          0
+        ),
+        0
+      );
     } else {
       calculatedTotalIncome = summary.totalIncome || 0;
     }
